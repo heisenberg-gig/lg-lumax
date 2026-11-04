@@ -1771,10 +1771,20 @@ fn row(out: &mut Scene, state: &State, assets: &Assets, row: Row<'_>) {
         Target::WallpaperCycle | Target::WallpaperGradient
     )
     .then(|| rotation_value_width(assets, state.preferences.language));
+    // Values keep the original 170 px box, widening only for long names such as
+    // "Português (Portugal)" so they are not wrapped and clipped.
+    let plain_value_width = row
+        .value
+        .map(|value| {
+            (assets.width(value, text(18.4, 450, 0.)) + 2.)
+                .ceil()
+                .clamp(170., 320.)
+        })
+        .unwrap_or(170.);
     let right_inset = if let Some(width) = compact_value_width {
         width + 24.2 + 24.
     } else if row.value.is_some() {
-        210.
+        plain_value_width + 40.
     } else if matches!(row.target, Target::UploadWallpaper | Target::WallpaperCycle) {
         24.2
     } else {
@@ -1812,7 +1822,7 @@ fn row(out: &mut Scene, state: &State, assets: &Assets, row: Row<'_>) {
         );
     }
     if let Some(value) = row.value {
-        let value_width = compact_value_width.unwrap_or(170.);
+        let value_width = compact_value_width.unwrap_or(plain_value_width);
         out.text(
             value,
             Rect::new(
