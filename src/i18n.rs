@@ -23,6 +23,8 @@ pub enum Language {
     ZhTw,
     Es,
     Pt,
+    #[serde(rename = "pt-pt", alias = "pt-PT")]
+    PtPt,
     It,
     Ru,
     Pl,
@@ -32,7 +34,7 @@ pub enum Language {
     Sv,
 }
 impl Language {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::De,
         Self::En,
         Self::Es,
@@ -41,6 +43,7 @@ impl Language {
         Self::Nl,
         Self::Pl,
         Self::Pt,
+        Self::PtPt,
         Self::Sv,
         Self::Vi,
         Self::Ru,
@@ -55,6 +58,7 @@ impl Language {
             Self::ZhTw => "zh-tw",
             Self::Es => "es",
             Self::Pt => "pt",
+            Self::PtPt => "pt-pt",
             Self::It => "it",
             Self::Ru => "ru",
             Self::Pl => "pl",
@@ -72,6 +76,7 @@ impl Language {
             Self::ZhTw => "繁體中文",
             Self::Es => "Español",
             Self::Pt => "Português (Brasil)",
+            Self::PtPt => "Português (Portugal)",
             Self::It => "Italiano",
             Self::Ru => "Русский",
             Self::Pl => "Polski",
@@ -87,12 +92,12 @@ impl Language {
             .position(|language| *language == self)
             .unwrap()
     }
-    /// Open-Meteo geocoding exposes one Chinese locale, not a script-specific variant.
+    /// Open-Meteo geocoding exposes one Chinese and one Portuguese locale, not regional variants.
     pub fn geocoding_code(self) -> &'static str {
-        if self == Self::ZhTw {
-            "zh"
-        } else {
-            self.code()
+        match self {
+            Self::ZhTw => "zh",
+            Self::PtPt => "pt",
+            _ => self.code(),
         }
     }
     pub fn t(self, key: &str) -> &str {
@@ -226,7 +231,7 @@ impl Language {
                 ][month]
             )
             .to_uppercase(),
-            Self::Pt => format!(
+            Self::Pt | Self::PtPt => format!(
                 "{}, {} de {}",
                 [
                     "segunda-feira",
@@ -491,6 +496,7 @@ pub fn deserialize_language<'de, D: Deserializer<'de>>(
             Some("zh-tw" | "zh-TW" | "zh-Hant") => Language::ZhTw,
             Some("es") => Language::Es,
             Some("pt") => Language::Pt,
+            Some("pt-pt" | "pt-PT") => Language::PtPt,
             Some("it") => Language::It,
             Some("ru") => Language::Ru,
             Some("pl") => Language::Pl,
@@ -558,7 +564,11 @@ mod tests {
 
     #[test]
     fn homebrew_description_lists_every_supported_language() {
-        let description = include_str!("../assets/homebrew-description.html");
+        // The formatter may wrap a language name across lines, so compare normalized whitespace.
+        let description = include_str!("../assets/homebrew-description.html")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         for language in super::Language::ALL {
             let name = match language {
                 super::Language::En => "English",
@@ -566,6 +576,7 @@ mod tests {
                 super::Language::Zh | super::Language::ZhTw => "Simplified / Traditional Chinese",
                 super::Language::Es => "Spanish",
                 super::Language::Pt => "Portuguese (Brazil)",
+                super::Language::PtPt => "Portuguese (Portugal)",
                 super::Language::It => "Italian",
                 super::Language::Ru => "Russian",
                 super::Language::Pl => "Polish",
@@ -633,6 +644,10 @@ mod tests {
         assert_eq!(
             Language::Pt.format("favoriteAdded", &[("app", "Netflix")]),
             "Netflix adicionado aos favoritos."
+        );
+        assert_eq!(
+            Language::PtPt.format("favoriteAdded", &[("app", "Netflix")]),
+            "Netflix adicionada aos favoritos."
         );
         assert_eq!(
             Language::Zh.format("hidden", &[("count", "3")]),
@@ -715,6 +730,40 @@ mod tests {
             assert_eq!(Language::Pt.date(now), expected);
         }
     }
+    #[test]
+    fn european_portuguese_is_separate_from_brazilian_and_preserves_preferences() {
+        assert_eq!(Language::ALL[Language::Pt.index() + 1], Language::PtPt);
+        assert_eq!(Language::PtPt.name(), "Português (Portugal)");
+        assert_eq!(Language::PtPt.code(), "pt-pt");
+        assert_eq!(Language::PtPt.geocoding_code(), "pt");
+        assert_eq!(Language::Pt.geocoding_code(), "pt");
+        for code in ["pt-pt", "pt-PT"] {
+            let preferences: crate::model::Preferences =
+                serde_json::from_value(serde_json::json!({"language": code})).unwrap();
+            assert_eq!(preferences.language, Language::PtPt);
+            assert_eq!(
+                serde_json::to_value(&preferences).unwrap()["language"],
+                "pt-pt"
+            );
+        }
+        let brazilian: crate::model::Preferences =
+            serde_json::from_value(serde_json::json!({"language": "pt"})).unwrap();
+        assert_eq!(brazilian.language, Language::Pt);
+        assert_eq!(Language::PtPt.t("settings"), "Definições");
+        assert_eq!(Language::Pt.t("settings"), "Ajustes");
+        assert_eq!(Language::PtPt.t("fog"), "Nevoeiro");
+        assert_eq!(Language::PtPt.t("deleteApp"), "Eliminar app");
+        assert_eq!(Language::PtPt.greeting(15, ""), "Boa tarde.");
+        assert_eq!(Language::PtPt.greeting(15, "Ana"), "Boa tarde, Ana.");
+        let now = OffsetDateTime::parse(
+            "2026-10-21T20:41:00+01:00",
+            &time::format_description::well_known::Rfc3339,
+        )
+        .unwrap();
+        assert_eq!(Language::PtPt.date(now), "QUARTA-FEIRA, 21 DE OUTUBRO");
+        assert_eq!(Language::PtPt.clock(now, true, false), "20:41");
+    }
+
     #[test]
     fn french_dates_use_the_ordinal_first_day_and_accented_months() {
         for (date, expected) in [
