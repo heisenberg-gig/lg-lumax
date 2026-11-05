@@ -25,6 +25,7 @@ mod scroll_preview;
 mod sdl_events;
 mod state;
 mod storage;
+mod system_info;
 mod text_rendering;
 #[path = "tile-editor.rs"]
 mod tile_editor;
@@ -665,10 +666,14 @@ fn run() -> Result<(), String> {
     } else {
         storage::load(&preferences_path)?
     };
-    let public_update_checks = update::public_checks_enabled(
-        !options.script.is_empty(),
-        options.test_update_version.is_some(),
-    );
+    // The in-app update from the release feed is off: Settings no longer offers it and nothing
+    // contacts the feed. The update code stays in the tree so it can be turned back on here.
+    const IN_APP_UPDATES: bool = false;
+    let public_update_checks = IN_APP_UPDATES
+        && update::public_checks_enabled(
+            !options.script.is_empty(),
+            options.test_update_version.is_some(),
+        );
     let mut state = State::new(initial_preferences);
     if let Some(version) = &options.test_update_version {
         eprintln!(
@@ -957,6 +962,7 @@ fn run() -> Result<(), String> {
     let mut inventory_retry: Option<Instant> = None;
     let mut input_refresh = input_refresh::Refresh::default();
     let mut tv_poller = tv_status::Poller::default();
+    let mut system_poller = tv_status::Poller::default();
     let scripted_input = !options.script.is_empty();
     let mut scene = compose(
         &mut state,
@@ -1139,6 +1145,10 @@ fn run() -> Result<(), String> {
                     tv_poller.completed(Instant::now(), result.is_ok());
                     state.set_tv_status(result);
                 }
+                Response::SystemInfo(result) => {
+                    system_poller.completed(Instant::now(), result.is_ok());
+                    state.set_system_info(result.map(|info| *info));
+                }
                 Response::Launched(result) => {
                     state.launching = false;
                     match result {
@@ -1212,6 +1222,15 @@ fn run() -> Result<(), String> {
         let tv_forced = std::mem::take(&mut state.tv_refresh_requested) && tv_active;
         if tv_poller.due(Instant::now(), tv_active, tv_forced) {
             platform.send(Request::TvStatus);
+        }
+        let system_active = focused
+            && visible
+            && state.page == state::Page::Settings
+            && state.section == state::SYSTEM_SECTION
+            && state.overlay.is_none();
+        let system_forced = std::mem::take(&mut state.system_refresh_requested) && system_active;
+        if system_poller.due(Instant::now(), system_active, system_forced) {
+            platform.send(Request::SystemInfo);
         }
         weather_tick(&mut state, &weather_service, visible);
         if std::mem::take(&mut state.update_check_requested) {

@@ -24,6 +24,7 @@ struct Fixture {
     pauses: Cell<usize>,
     fail_unmount: Cell<bool>,
     stuck: Cell<bool>,
+    df: RefCell<String>,
 }
 impl Fixture {
     fn new() -> Self {
@@ -53,6 +54,7 @@ impl Fixture {
             pauses: Cell::new(0),
             fail_unmount: Cell::new(false),
             stuck: Cell::new(false),
+            df: RefCell::new(String::new()),
         };
         for dir in [
             "/var/lib/luma-home/app",
@@ -194,6 +196,13 @@ impl System for Fixture {
             }
             self.unmount(args.last().unwrap());
             return Ok(ok(json!({})));
+        }
+        if program == "/bin/df" {
+            return Ok(Output {
+                stdout: self.df.borrow().clone().into_bytes(),
+                stderr: vec![],
+                success: !self.df.borrow().is_empty(),
+            });
         }
         if program != "/usr/bin/luna-send" {
             panic!("Unexpected system command: {program}");
@@ -985,4 +994,46 @@ fn tv_status_tolerates_refused_services_and_requires_root() {
     assert!(reply["picture"].is_null() && reply["video"].is_null());
     f.uid.set(1000);
     assert!(status::collect(&f).is_err());
+}
+
+#[test]
+fn tv_system_reads_files_storage_and_services_and_tolerates_gaps() {
+    let f = Fixture::new();
+    f.put("/proc/lg/pm/temperature", b"45\n");
+    f.put(
+        "/proc/meminfo",
+        b"MemTotal: 1000 kB\nMemAvailable: 400 kB\n",
+    );
+    *f.df.borrow_mut() = "Filesystem 1K-blocks Used Available Use% Mounted on\n/dev/x 1000 250 750 25% /mnt/lg/appstore\n".into();
+    f.reply(
+        "getSystemProperties",
+        Ok(json!({"returnValue":true,"modelName":"OLED55C54LA"})),
+    );
+    f.reply("getStatus", Err("no network".into()));
+    let reply = metrics::collect(&f).unwrap();
+    assert_eq!(reply["temperature"]["lg"], true);
+    assert_eq!(reply["temperature"]["value"], "45\n");
+    assert!(reply["meminfo"].as_str().unwrap().contains("MemTotal"));
+    assert!(
+        reply["storage"]
+            .as_str()
+            .unwrap()
+            .contains("/mnt/lg/appstore")
+    );
+    assert_eq!(reply["properties"]["modelName"], "OLED55C54LA");
+    assert!(reply["connection"].is_null() && reply["emmc_life_time"].is_null());
+}
+
+#[test]
+fn tv_system_falls_back_to_the_thermal_zone_and_requires_root() {
+    let f = Fixture::new();
+    f.put("/sys/class/thermal/thermal_zone0/temp", b"51000\n");
+    f.reply("getSystemProperties", Ok(json!({"returnValue":false})));
+    f.reply("getStatus", Ok(json!({"returnValue":false})));
+    let reply = metrics::collect(&f).unwrap();
+    assert_eq!(reply["temperature"]["lg"], false);
+    assert_eq!(reply["temperature"]["value"], "51000\n");
+    assert!(reply["storage"].is_null() && reply["properties"].is_null());
+    f.uid.set(1000);
+    assert!(metrics::collect(&f).is_err());
 }

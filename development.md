@@ -216,7 +216,7 @@ close, the remaining cards slide into the gap and the next card comes forward. A
 returns the card to the stack. Exiting cards have no hit target, and closing the final card finishes
 its exit before showing the empty state. Held-Up repeats are ignored to prevent
 unintentionally closing more apps as the next card becomes focused. Back dismisses the switcher; Quit app remains an
-explicit Settings → System action.
+explicit Settings → General action.
 
 | Input                 | Action                                      |
 | --------------------- | ------------------------------------------- |
@@ -398,7 +398,7 @@ handles font outlines. Installed app PNG/JPEG/WebP artwork, wallpaper photos, ti
 images and the webOS installation icon remain raster assets. See [assets.md](assets.md) for licenses.
 
 TV and desktop windows default to 4× MSAA with 2×/single-sample fallbacks and no text
-emboldening, restoring the text treatment used in v2.8.0. **Settings → System → Text rendering**
+emboldening, restoring the text treatment used in v2.8.0. **Settings → General → Text rendering**
 offers **MSAA (default)** and **Analytic**. The `text_rendering` preference (`msaa` or `analytic`)
 is saved immediately and applies when Luma next starts because SDL selects MSAA when it creates
 the window. Missing or invalid preferences use MSAA. The setting shows a restart reminder.
@@ -841,6 +841,10 @@ runtime font/translation services or telemetry are used. Weather attribution: Op
 
 ## Update availability
 
+> In-app updates are switched off in this fork: Settings has no update card, no check runs at
+> startup and nothing contacts the release feed (`IN_APP_UPDATES` in `src/main.rs`). Install new
+> builds as an IPK through Homebrew Channel. The text below describes the code kept for reference.
+
 On interactive desktop or TV startup a separate worker checks
 `https://github.com/ecklf/lg-luma/releases/latest/download/repo.json` once per process automatically.
 **Settings → System → Check again** retries on the same worker, with one request in flight at a time.
@@ -1053,6 +1057,19 @@ and `fullhome` executable targets are supported; the latter requires matching na
 support from #142. Manifest takeover remains limited to webOS
 10/11. The optional `tv-input` subcommand implements the #124 registration/verification contract;
 its Settings integration is still tracked by that separate PR and requires `supportGIP`.
+
+### Settings → System (read-only metrics)
+
+The System section mirrors native-tv's Metrics menu and only reads. `luma-helper tv-system` returns
+raw text and replies: `/proc/meminfo`, the LG thermal file (thermal zone fallback),
+`/proc/lg/pm/frequency`, `/proc/lg/pm/status` (per-core load slots), `/proc/lg/sys/status` (GPU
+clock), the eMMC `life_time` file, `df -k /mnt/lg/appstore`, `environmentCondition`, `/etc/issue`,
+`systemproperty/getSystemProperties` and `connectionmanager/getStatus`. A missing source becomes
+`null`. `src/system_info.rs` parses them (tested in `src/system-info-tests.rs`) into Load (processor
+temperature, CPU load, CPU and GPU clocks, per-core load), Memory and storage (free memory, swap,
+app storage, eMMC health) and This TV (model, firmware, webOS, SoC, RAM, panel refresh, Wi-Fi).
+Readings the TV does not report are not shown. Refresh follows the Picture section. Remote battery
+and per-process metrics from native-tv are not included.
 
 ### Settings → Picture (read-only status)
 
