@@ -5,8 +5,8 @@ use crate::{
     renderer::{Color, Draw, TextStyle, WHITE},
     state::{
         APPS_COLUMNS, Control, HOME_FADE_LEFT, HOME_FADE_RIGHT, HOME_STRIP_LEFT, HOME_STRIP_RIGHT,
-        HOME_TILE_PITCH, HOME_TILE_WIDTH, KEYS, Overlay, Page, Rect, SYSTEM_SECTION, State,
-        Subpage, TV_SECTION, Target, TextField, WIDGETS_SECTION,
+        HOME_TILE_PITCH, HOME_TILE_WIDTH, KEYS, Overlay, PICTURE_SECTION, Page, Rect,
+        SYSTEM_SECTION, State, Subpage, Target, TextField, WIDGETS_SECTION,
     },
     weather::{self, Unit},
 };
@@ -2103,7 +2103,7 @@ fn settings(out: &mut Scene, state: &State, assets: &Assets) {
 
 fn settings_sidebar(out: &mut Scene, state: &State, assets: &Assets) {
     let language = state.preferences.language;
-    for (index, key) in ["interface", "background", "widgets", "system", "tv"]
+    for (index, key) in ["interface", "background", "widgets", "system", "picture"]
         .into_iter()
         .enumerate()
     {
@@ -2655,13 +2655,13 @@ fn settings_content(out: &mut Scene, state: &State, assets: &Assets) {
                 );
             }
         }
-        TV_SECTION => tv_settings(out, state, assets),
+        PICTURE_SECTION => picture_settings(out, state, assets),
         _ => {}
     }
 }
 
-/// Read-only TV status. Names such as picture modes and HDR formats are LG's own terms.
-fn tv_settings(out: &mut Scene, state: &State, assets: &Assets) {
+/// Read-only picture status. Names such as picture modes and HDR formats are LG's own terms.
+fn picture_settings(out: &mut Scene, state: &State, assets: &Assets) {
     let language = state.preferences.language;
     let s = state.scroll;
     row(
@@ -2700,62 +2700,69 @@ fn tv_settings(out: &mut Scene, state: &State, assets: &Assets) {
                 .to_owned()
         })
     };
-    let hours = |hours: u32| language.format("tvHours", &[("hours", &hours.to_string())]);
-    let lines = [
-        ("tvPictureMode", status.picture_mode.clone()),
-        ("tvOledLight", status.oled_light.map(|v| format!("{v}"))),
-        (
-            "tvEnergySaving",
-            status.energy_saving.as_deref().map(|key| {
-                if key == "off" {
+    let picture: Vec<(&str, String)> = status
+        .picture
+        .iter()
+        .map(|(key, reading)| {
+            let value = match reading {
+                crate::tv_status::Reading::Number(n) => n.to_string(),
+                crate::tv_status::Reading::Text(t) if t == "off" => {
                     language.t("stateOff").to_owned()
-                } else {
-                    crate::tv_status::spell(key)
                 }
-            }),
-        ),
+                crate::tv_status::Reading::Text(t) => t.clone(),
+            };
+            (*key, value)
+        })
+        .collect();
+    let signal: Vec<(&str, String)> = [
         ("tvHdr", status.hdr.clone()),
         ("tvGameMode", on_off(status.game_mode)),
         ("tvFreesync", on_off(status.freesync)),
-        (
-            "tvTemperature",
-            status.temperature_c.map(|v| format!("{v} °C")),
-        ),
-        (
-            "tvMemory",
-            status
-                .memory_used_mb
-                .zip(status.memory_total_mb)
-                .map(|(used, total)| format!("{used} / {total} MB")),
-        ),
-        ("tvPanelHours", status.panel_hours.map(hours)),
-    ];
-    let line = 52.;
-    let card = Rect::new(640., 260.8 - s, 1120., lines.len() as f32 * line + 32.);
-    settings_surface(out, card, 20.);
-    for (index, (key, value)) in lines.into_iter().enumerate() {
-        let y = card.y + 16. + index as f32 * line;
-        if index > 0 && index % 3 == 0 {
-            out.shape(
-                Rect::new(card.x + 24., y - 1., card.w - 48., 1.),
-                0.,
-                c(0xffffff, 0.07),
-            );
+    ]
+    .into_iter()
+    .filter_map(|(key, value)| Some((key, value?)))
+    .collect();
+    // Two columns keep every reading on one 1080p screen: settings on the left, signal beside it.
+    let line = 48.;
+    let top = 260.8 - s;
+    for (column, (heading, lines)) in [("tvImage", picture), ("tvSignal", signal)]
+        .into_iter()
+        .enumerate()
+    {
+        if lines.is_empty() {
+            continue;
         }
+        let (x, width) = if column == 0 {
+            (640., 640.)
+        } else {
+            (1304., 456.)
+        };
         out.text(
-            language.t(key),
-            Rect::new(card.x + 24., y + 8., 460., 36.),
-            text(20.8, 450, -0.02).leading(1.4),
-            c(0xeeeeee, 0.73),
-            false,
-        );
-        out.text(
-            value.unwrap_or_else(|| "—".into()),
-            Rect::new(card.x + 500., y + 8., card.w - 524., 36.),
-            text(20.8, 550, -0.02).leading(1.4).right(),
+            language.t(heading),
+            Rect::new(x + 24., top, width - 48., 34.),
+            text(24., 550, -0.02).leading(1.4),
             WHITE,
             false,
         );
+        let card = Rect::new(x, top + 44., width, lines.len() as f32 * line + 32.);
+        settings_surface(out, card, 20.);
+        for (index, (key, value)) in lines.into_iter().enumerate() {
+            let row_y = card.y + 16. + index as f32 * line;
+            out.text(
+                language.t(key),
+                Rect::new(card.x + 24., row_y + 6., card.w * 0.5 - 24., 36.),
+                text(20.8, 450, -0.02).leading(1.4),
+                c(0xeeeeee, 0.73),
+                false,
+            );
+            out.text(
+                value,
+                Rect::new(card.x + card.w * 0.5, row_y + 6., card.w * 0.5 - 24., 36.),
+                text(20.8, 550, -0.02).leading(1.4).right(),
+                WHITE,
+                false,
+            );
+        }
     }
 }
 

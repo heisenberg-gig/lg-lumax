@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 pub const WIDGETS_SECTION: usize = 2;
 pub const SYSTEM_SECTION: usize = 3;
-pub const TV_SECTION: usize = 4;
+pub const PICTURE_SECTION: usize = 4;
 pub const SECTION_COUNT: usize = 5;
 pub const SETTINGS_BOTTOM_PADDING: f32 = 64.;
 pub const SETTINGS_LIST_BOTTOM_PADDING: f32 = 48.;
@@ -1006,7 +1006,7 @@ impl State {
             WIDGETS_SECTION => Target::Widget(4),
             SYSTEM_SECTION if self.available_update.is_some() => Target::InstallUpdate,
             SYSTEM_SECTION => Target::CheckUpdates,
-            TV_SECTION => Target::TvRefresh,
+            PICTURE_SECTION => Target::TvRefresh,
             _ => Target::Setting(0),
         }
     }

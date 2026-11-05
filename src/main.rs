@@ -1207,7 +1207,7 @@ fn run() -> Result<(), String> {
         let tv_active = focused
             && visible
             && state.page == state::Page::Settings
-            && state.section == state::TV_SECTION
+            && state.section == state::PICTURE_SECTION
             && state.overlay.is_none();
         let tv_forced = std::mem::take(&mut state.tv_refresh_requested) && tv_active;
         if tv_poller.due(Instant::now(), tv_active, tv_forced) {

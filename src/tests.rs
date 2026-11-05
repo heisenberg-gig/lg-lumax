@@ -933,7 +933,7 @@ fn system_category_owns_refresh_and_quit_and_restores_sidebar_focus() {
     state.back();
     assert_eq!(state.focus, Target::Sidebar(crate::state::SYSTEM_SECTION));
     state.direction(Direction::Down, &controls(&state));
-    assert_eq!(state.focus, Target::Sidebar(crate::state::TV_SECTION));
+    assert_eq!(state.focus, Target::Sidebar(crate::state::PICTURE_SECTION));
     state.direction(Direction::Down, &controls(&state));
     assert_eq!(state.focus, Target::Sidebar(0));
     assert_eq!(state.section, 0);
@@ -3274,11 +3274,11 @@ fn update_card_shows_progress_restores_retry_and_ignores_presses_while_busy() {
 
 #[test]
 fn tv_section_shows_status_requests_refresh_and_survives_a_failed_read() {
-    use crate::state::TV_SECTION;
+    use crate::state::PICTURE_SECTION;
     let mut state = ready();
     state.open(2);
-    state.focus(Target::Sidebar(TV_SECTION), &[]);
-    assert_eq!(state.section, TV_SECTION);
+    state.focus(Target::Sidebar(PICTURE_SECTION), &[]);
+    assert_eq!(state.section, PICTURE_SECTION);
     state.activate();
     assert_eq!(state.focus, Target::TvRefresh);
     assert!(
@@ -3305,7 +3305,7 @@ fn tv_section_shows_status_requests_refresh_and_survives_a_failed_read() {
         1
     );
     state.direction(Direction::Left, &controls(&state));
-    assert_eq!(state.focus, Target::Sidebar(TV_SECTION));
+    assert_eq!(state.focus, Target::Sidebar(PICTURE_SECTION));
 }
 
 #[test]

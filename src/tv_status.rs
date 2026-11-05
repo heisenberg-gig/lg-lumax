@@ -3,19 +3,20 @@
 //! terms (picture modes, HDR formats) and are not translated.
 use serde_json::Value;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Reading {
+    Number(i64),
+    /// A name such as `off`, `Cinema` or `Warm 2`; `off` is the only value Luma translates.
+    Text(String),
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TvStatus {
-    pub picture_mode: Option<String>,
-    pub oled_light: Option<u32>,
-    /// Raw LG key such as `off`, `min`, `auto`.
-    pub energy_saving: Option<String>,
+    /// Picture settings in display order, as `(message key, reading)`; missing ones are absent.
+    pub picture: Vec<(&'static str, Reading)>,
     pub hdr: Option<String>,
     pub game_mode: Option<bool>,
     pub freesync: Option<bool>,
-    pub temperature_c: Option<u32>,
-    pub memory_used_mb: Option<u32>,
-    pub memory_total_mb: Option<u32>,
-    pub panel_hours: Option<u32>,
 }
 
 impl TvStatus {
@@ -29,7 +30,8 @@ pub fn spell(key: &str) -> String {
     let mut words: Vec<String> = vec![];
     let mut word = String::new();
     for c in key.chars().filter(|c| !matches!(c, '_' | '-' | ' ')) {
-        if c.is_uppercase() && !word.is_empty() {
+        let after_letter = word.chars().last().is_some_and(char::is_alphabetic);
+        if (c.is_uppercase() || (c.is_ascii_digit() && after_letter)) && !word.is_empty() {
             words.push(std::mem::take(&mut word));
         }
         word.push(c);
@@ -87,13 +89,10 @@ pub fn hdr_format(key: &str) -> Option<String> {
     )
 }
 
-fn number(value: &Value) -> Option<u64> {
+fn number(value: &Value) -> Option<i64> {
     match value {
-        Value::Number(n) => n.as_u64().or_else(|| n.as_f64().map(|f| f.max(0.) as u64)),
-        Value::String(s) => {
-            let digits: String = s.trim().chars().take_while(char::is_ascii_digit).collect();
-            digits.parse().ok()
-        }
+        Value::Number(n) => n.as_i64().or_else(|| n.as_f64().map(|f| f.round() as i64)),
+        Value::String(s) => s.trim().parse().ok(),
         _ => None,
     }
 }
@@ -114,31 +113,63 @@ fn text(value: &Value) -> Option<&str> {
     value.as_str().filter(|s| !s.is_empty() && s.len() <= 64)
 }
 
-fn temperature(raw: &Value) -> Option<u32> {
-    let value = number(&Value::String(raw.as_str()?.to_owned()))?;
-    // /proc/lg/pm/temperature reports degrees; the thermal zone fallback reports millidegrees.
-    let degrees = if value > 250 { value / 1000 } else { value };
-    (degrees <= 250).then_some(degrees as u32)
+fn reading(value: &Value) -> Option<Reading> {
+    number(value)
+        .filter(|n| (-1000..=1000).contains(n))
+        .map(Reading::Number)
+        .or_else(|| text(value).map(|t| Reading::Text(spell_value(t))))
 }
 
-fn memory(raw: &Value) -> Option<(u32, u32)> {
-    let meminfo = raw.as_str()?;
-    let field = |name: &str| {
-        meminfo.lines().find_map(|line| {
-            let rest = line.strip_prefix(name)?.strip_prefix(':')?;
-            number(&Value::String(rest.trim().to_owned()))
-        })
-    };
-    let total = field("MemTotal")?;
-    let free = field("MemAvailable").or_else(|| field("MemFree"))?;
-    (total > 0 && free <= total).then(|| (((total - free) / 1024) as u32, (total / 1024) as u32))
+/// `warm2` -> "Warm 2", `off` stays `off` so the view can translate it.
+fn spell_value(raw: &str) -> String {
+    if raw == "off" { raw.into() } else { spell(raw) }
 }
+
+/// Some keys (black level) are per input type: `{"hdmi":"low","ntsc":"auto"}`. Use the entry of
+/// the current input family, or the shared value when every entry agrees.
+fn per_input(value: &Value, input: Option<&str>) -> Value {
+    let Some(map) = value.as_object() else {
+        return value.clone();
+    };
+    let family = input.map(|i| i.trim_end_matches(|c: char| c.is_ascii_digit()));
+    if let Some(entry) = family.and_then(|f| map.get(f)) {
+        return entry.clone();
+    }
+    let mut values = map.values();
+    match values.next() {
+        Some(first) if values.all(|v| v == first) => first.clone(),
+        _ => Value::Null,
+    }
+}
+
+const PICTURE: [(&str, &str); 10] = [
+    ("backlight", "tvOledLight"),
+    ("brightness", "tvBrightness"),
+    ("contrast", "tvContrast"),
+    ("color", "tvColor"),
+    ("sharpness", "tvSharpness"),
+    ("blackLevel", "tvBlackLevel"),
+    ("colorTemperature", "tvColorTemperature"),
+    ("gamma", "tvGamma"),
+    ("dynamicContrast", "tvDynamicContrast"),
+    ("energySaving", "tvEnergySaving"),
+];
 
 pub fn normalize(reply: &Value) -> Result<TvStatus, String> {
     if !reply.is_object() {
         return Err("Invalid TV status reply".into());
     }
     let settings = &reply["picture"]["settings"];
+    let input = text(&reply["picture"]["dimension"]["input"]);
+    let mut picture = vec![];
+    if let Some(mode) = text(&settings["pictureMode"]) {
+        picture.push(("tvPictureMode", Reading::Text(picture_mode(mode))));
+    }
+    for (key, label) in PICTURE {
+        if let Some(value) = reading(&per_input(&settings[key], input)) {
+            picture.push((label, value));
+        }
+    }
     let sink = reply["video"]["video"].as_array().and_then(|sinks| {
         sinks
             .iter()
@@ -151,42 +182,38 @@ pub fn normalize(reply: &Value) -> Result<TvStatus, String> {
     let from_dimension = text(&reply["picture"]["dimension"]["dynamicRange"])
         .map(|range| range.trim_end_matches("ALLM"))
         .and_then(hdr_format);
-    let (memory_used_mb, memory_total_mb) = memory(&reply["meminfo"]).unzip();
     let status = TvStatus {
-        picture_mode: text(&settings["pictureMode"]).map(picture_mode),
-        oled_light: number(&settings["backlight"])
-            .filter(|v| *v <= 100)
-            .map(|v| v as u32),
-        energy_saving: text(&settings["energySaving"]).map(str::to_owned),
+        picture,
         hdr: from_info.or(from_dimension),
         game_mode: info.and_then(|info| flag(&info["isGameMode"])),
         freesync: info.and_then(|info| flag(&info["freesyncEnabled"])),
-        temperature_c: temperature(&reply["temperature"]),
-        memory_used_mb,
-        memory_total_mb,
-        panel_hours: number(&reply["panel"]["panelUsageTime"])
-            .filter(|units| *units < 6_000_000)
-            .map(|units| (units / 6) as u32),
     };
     if status.is_empty() {
-        return Err("The TV returned no status information".into());
+        return Err("The TV returned no picture information".into());
     }
     Ok(status)
 }
 
-/// Desktop builds never call a TV; this mirrors a typical OLED in game mode.
+/// Desktop builds never call a TV; this mirrors a typical OLED in Filmmaker Mode.
 pub fn demo() -> TvStatus {
+    use Reading::{Number, Text};
     TvStatus {
-        picture_mode: Some("Filmmaker Mode".into()),
-        oled_light: Some(80),
-        energy_saving: Some("off".into()),
+        picture: vec![
+            ("tvPictureMode", Text("Filmmaker Mode".into())),
+            ("tvOledLight", Number(80)),
+            ("tvBrightness", Number(50)),
+            ("tvContrast", Number(85)),
+            ("tvColor", Number(50)),
+            ("tvSharpness", Number(10)),
+            ("tvBlackLevel", Text("Auto".into())),
+            ("tvColorTemperature", Text("Warm 2".into())),
+            ("tvGamma", Text("Medium".into())),
+            ("tvDynamicContrast", Text("off".into())),
+            ("tvEnergySaving", Text("off".into())),
+        ],
         hdr: Some("Dolby Vision".into()),
         game_mode: Some(false),
         freesync: Some(false),
-        temperature_c: Some(46),
-        memory_used_mb: Some(1210),
-        memory_total_mb: Some(2830),
-        panel_hours: Some(1284),
     }
 }
 
