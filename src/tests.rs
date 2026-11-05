@@ -880,66 +880,6 @@ fn time_format_selects_seconds_without_changing_the_hour_format() {
 }
 
 #[test]
-fn system_version_is_inside_the_update_status_card_without_a_separate_row() {
-    let mut state = ready();
-    state.open(2);
-    state.section = crate::state::SYSTEM_SECTION;
-    state.panel_started = None;
-    let system = scene(&state);
-    assert!(system.draw.iter().any(|draw| matches!(
-        draw,
-        crate::renderer::Draw::Shape(rect, _, _, color)
-            if rect.x == 640. && rect.y == 164.8 && rect.w == 1120. && rect.h == 220. && color[3] == 0.72
-    )));
-    assert!(system.draw.iter().any(|draw| matches!(
-        draw,
-        crate::renderer::Draw::Text(label, _, style, color, _)
-            if label == "Current version: test" && style.size == 20.8 && style.weight == 450 && color[3] == 0.73
-    )));
-    assert_eq!(state.hit_test(&system.controls, 900., 200.), None);
-    state.focus = Target::Sidebar(crate::state::SYSTEM_SECTION);
-    state.direction(Direction::Right, &system.controls);
-    assert_eq!(state.focus, Target::CheckUpdates);
-}
-
-#[test]
-fn system_category_owns_refresh_and_quit_and_restores_sidebar_focus() {
-    let mut state = ready();
-    state.open(2);
-    assert!(
-        !controls(&state)
-            .iter()
-            .any(|c| matches!(c.target, Target::Setting(3 | 5)))
-    );
-    assert!(
-        controls(&state)
-            .iter()
-            .any(|c| c.target == Target::Sidebar(crate::state::SYSTEM_SECTION))
-    );
-    state.focus = Target::Sidebar(crate::state::SYSTEM_SECTION - 1);
-    state.direction(Direction::Down, &controls(&state));
-    assert_eq!(state.focus, Target::Sidebar(crate::state::SYSTEM_SECTION));
-    assert_eq!(state.section, crate::state::SYSTEM_SECTION);
-    state.direction(Direction::Right, &controls(&state));
-    assert_eq!(state.focus, Target::CheckUpdates);
-    state.direction(Direction::Down, &controls(&state));
-    assert_eq!(state.focus, Target::Setting(3));
-    assert_eq!(state.activate(), vec![Effect::Reload]);
-    state.direction(Direction::Down, &controls(&state));
-    assert_eq!(state.focus, Target::Setting(7));
-    state.direction(Direction::Down, &controls(&state));
-    assert_eq!(state.focus, Target::Setting(5));
-    assert_eq!(state.activate(), vec![Effect::Quit]);
-    state.back();
-    assert_eq!(state.focus, Target::Sidebar(crate::state::SYSTEM_SECTION));
-    state.direction(Direction::Down, &controls(&state));
-    assert_eq!(state.focus, Target::Sidebar(crate::state::PICTURE_SECTION));
-    state.direction(Direction::Down, &controls(&state));
-    assert_eq!(state.focus, Target::Sidebar(0));
-    assert_eq!(state.section, 0);
-}
-
-#[test]
 fn text_rendering_preferences_default_to_msaa_and_recover_invalid_values() {
     use crate::text_rendering::TextRendering;
     for value in [
@@ -2973,98 +2913,6 @@ fn date_formats_preserve_localized_default_and_pad_numeric_dates() {
 }
 
 #[test]
-fn update_card_shows_both_versions_and_explicitly_starts_installation() {
-    use crate::{i18n::Language, renderer::Draw};
-    for language in Language::ALL {
-        let mut state = ready();
-        state.preferences.language = language;
-        state.open(2);
-        state.section = crate::state::SYSTEM_SECTION;
-        assert!(
-            !controls(&state)
-                .iter()
-                .any(|control| control.target == Target::InstallUpdate)
-        );
-        state.available_update = Some("9.0.0".into());
-        let rendered = scene(&state);
-        for label in [
-            language.t("updateAvailable").to_owned(),
-            language.format("installUpdate", &[("version", "9.0.0")]),
-            language.format(
-                "updateVersions",
-                &[("current", "test"), ("latest", "9.0.0")],
-            ),
-        ] {
-            assert!(
-                rendered
-                    .draw
-                    .iter()
-                    .any(|draw| matches!(draw, Draw::Text(text, ..) if text == &label))
-            );
-        }
-        state.focus = Target::Sidebar(crate::state::SYSTEM_SECTION);
-        state.direction(Direction::Right, &rendered.controls);
-        assert_eq!(state.focus, Target::InstallUpdate);
-        assert_eq!(
-            state.activate(),
-            vec![Effect::UpdateDownload("9.0.0".into())]
-        );
-        let button = rendered
-            .controls
-            .iter()
-            .find(|control| control.target == Target::InstallUpdate)
-            .unwrap();
-        let (x, y) = button.rect.center();
-        assert_eq!(
-            state.hit_test(&rendered.controls, x, y),
-            Some(Target::InstallUpdate)
-        );
-        state.direction(Direction::Down, &rendered.controls);
-        assert_eq!(state.focus, Target::Setting(3));
-        state.focus = Target::InstallUpdate;
-        state.direction(Direction::Left, &rendered.controls);
-        assert_eq!(state.focus, Target::Sidebar(crate::state::SYSTEM_SECTION));
-    }
-}
-
-#[test]
-fn update_status_card_only_claims_latest_after_success_and_allows_single_flight_retry() {
-    use crate::{renderer::Draw, update::Status};
-    let mut state = ready();
-    state.open(2);
-    state.section = crate::state::SYSTEM_SECTION;
-    state.focus = Target::CheckUpdates;
-    assert_eq!(state.update_status, Status::Unchecked);
-    assert!(!scene(&state).draw.iter().any(|draw| matches!(draw,
-        Draw::Text(label, ..) if label == state.preferences.language.t("latestVersionInstalled")
-    )));
-    assert!(state.activate().is_empty());
-    assert_eq!(state.update_status, Status::Checking);
-    assert!(std::mem::take(&mut state.update_check_requested));
-    state.activate();
-    assert!(!state.update_check_requested);
-    state.update_response(Err("offline".into()));
-    assert_eq!(state.update_status, Status::Failed);
-    assert!(!scene(&state).draw.iter().any(|draw| matches!(draw,
-        Draw::Text(label, ..) if label == state.preferences.language.t("latestVersionInstalled")
-    )));
-    state.activate();
-    assert!(std::mem::take(&mut state.update_check_requested));
-    state.update_response(Ok(None));
-    assert_eq!(state.update_status, Status::Checked);
-    for key in ["latestVersionInstalled", "checkAgain"] {
-        assert!(scene(&state).draw.iter().any(|draw| matches!(draw,
-            Draw::Text(label, ..) if label == state.preferences.language.t(key)
-        )));
-    }
-    state.activate();
-    state.update_response(Ok(Some("9.0.0".into())));
-    assert_eq!(state.focus, Target::InstallUpdate);
-    state.update_response(Err("offline".into()));
-    assert_eq!(state.available_update.as_deref(), Some("9.0.0"));
-}
-
-#[test]
 fn shortcut_tiles_keep_apps_options_and_never_launch_or_uninstall_a_platform_app() {
     let tile = crate::model::CustomTile {
         id: "custom.lamp".into(),
@@ -3205,74 +3053,6 @@ fn tiles_edited_elsewhere_join_and_leave_home_like_tv_edits() {
 }
 
 #[test]
-fn update_card_shows_progress_restores_retry_and_ignores_presses_while_busy() {
-    use crate::update::{InstallStatus, Response, Status};
-    let mut state = ready();
-    state.open(2);
-    state.section = crate::state::SYSTEM_SECTION;
-    state.focus = Target::CheckUpdates;
-    assert!(state.activate().is_empty());
-    assert_eq!(state.update_status, Status::Checking);
-    assert!(
-        state.activate().is_empty(),
-        "no second check while one runs"
-    );
-    state.update_response(Ok(Some("9.9.9".into())));
-    assert!(scene(&state).draw.iter().any(|draw| {
-        matches!(draw, crate::renderer::Draw::Text(text, ..) if text == "Install 9.9.9")
-    }));
-    let initial = scene(&state);
-    assert!(
-        !initial
-            .controls
-            .iter()
-            .any(|control| control.target == Target::Setting(8))
-    );
-    assert_eq!(
-        state.activate(),
-        vec![Effect::UpdateDownload("9.9.9".into())]
-    );
-    assert_eq!(state.update, InstallStatus::Downloading(0));
-    assert!(state.activate().is_empty());
-    state.install_response(Response::Progress(45));
-    assert!(scene(&state).draw.iter().any(|draw| {
-        matches!(draw, crate::renderer::Draw::Text(text, ..) if text == "Downloading 45 %")
-    }));
-    let geometry = |items: Vec<crate::state::Control>| {
-        items
-            .into_iter()
-            .map(|item| {
-                (
-                    item.target,
-                    item.rect.x,
-                    item.rect.y,
-                    item.rect.w,
-                    item.rect.h,
-                )
-            })
-            .collect::<Vec<_>>()
-    };
-    assert_eq!(
-        geometry(controls(&state)),
-        geometry(initial.controls),
-        "progress must not move hit targets"
-    );
-    state.install_response(Response::Installing("9.9.9".into()));
-    assert!(state.activate().is_empty());
-    state.pressed = Some(Target::InstallUpdate);
-    state.install_response(Response::Finished(Err("disk full".into())));
-    assert_eq!(state.focus, Target::CheckUpdates);
-    assert!(state.pressed.is_none());
-    assert!(state.available_update.is_none());
-    assert!(!state.update_busy());
-    state.activate();
-    assert_eq!(state.update_status, Status::Checking);
-    assert_eq!(state.update, InstallStatus::Idle);
-    state.install_response(Response::Finished(Ok(())));
-    assert_eq!(state.update_status, Status::Unchecked);
-}
-
-#[test]
 fn tv_section_shows_status_requests_refresh_and_survives_a_failed_read() {
     use crate::state::PICTURE_SECTION;
     let mut state = ready();
@@ -3328,4 +3108,62 @@ fn tv_poller_reads_at_once_then_slowly_and_never_overlaps() {
         poller.due(now, true, false),
         "re-entering the section reads at once"
     );
+}
+
+#[test]
+fn general_owns_text_rendering_refresh_and_quit_and_the_update_card_is_gone() {
+    let mut state = ready();
+    state.open(2);
+    state.focus(Target::Sidebar(0), &[]);
+    assert_eq!(state.section, 0);
+    for index in [7, 3, 5] {
+        assert!(
+            controls(&state)
+                .iter()
+                .any(|c| c.target == Target::Setting(index))
+        );
+    }
+    state.focus = Target::Setting(3);
+    assert_eq!(state.activate(), vec![Effect::Reload]);
+    state.focus = Target::Setting(5);
+    assert_eq!(state.activate(), vec![Effect::Quit]);
+    state.focus = Target::Setting(7);
+    state.activate();
+    assert_eq!(state.subpage, Some(crate::state::Subpage::TextRendering));
+    state.back();
+    state.focus(Target::Sidebar(crate::state::SYSTEM_SECTION), &[]);
+    assert!(!controls(&state).iter().any(|c| matches!(
+        c.target,
+        Target::CheckUpdates | Target::InstallUpdate | Target::Setting(3 | 5 | 7)
+    )));
+}
+
+#[test]
+fn system_section_shows_metrics_requests_refresh_and_survives_a_failed_read() {
+    use crate::state::SYSTEM_SECTION;
+    let mut state = ready();
+    state.open(2);
+    state.focus(Target::Sidebar(SYSTEM_SECTION), &[]);
+    state.activate();
+    assert_eq!(state.focus, Target::SystemRefresh);
+    assert!(state.activate().is_empty());
+    assert!(state.system_refresh_requested);
+    state.set_system_info(Ok(crate::system_info::demo()));
+    assert!(state.system_info.is_some() && !state.system_info_error);
+    state.set_system_info(Err("offline".into()));
+    assert!(state.system_info.is_some() && state.system_info_error);
+    let page = scene(&state);
+    assert_eq!(
+        page.controls
+            .iter()
+            .filter(|c| !matches!(
+                c.target,
+                Target::Sidebar(_) | Target::Nav(_) | Target::TvSettings
+            ))
+            .count(),
+        1,
+        "only the refresh row is interactive"
+    );
+    state.direction(Direction::Left, &controls(&state));
+    assert_eq!(state.focus, Target::Sidebar(SYSTEM_SECTION));
 }

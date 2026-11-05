@@ -176,6 +176,7 @@ pub enum Request {
     Refresh,
     RefreshInputs,
     TvStatus,
+    SystemInfo,
     Launch(String),
     Uninstall(String),
     SyncSplash(String),
@@ -188,6 +189,7 @@ pub enum Response {
     Inventory(Result<(Inventory, Option<String>), String>),
     Inputs(Result<Vec<Input>, String>),
     TvStatus(Result<crate::tv_status::TvStatus, String>),
+    SystemInfo(Result<crate::system_info::SystemInfo, String>),
     Launched(Result<(), String>),
     Uninstalled {
         id: String,
@@ -264,6 +266,11 @@ impl Platform {
                         tv_status_call()
                     } else {
                         Ok(crate::tv_status::demo())
+                    }),
+                    Request::SystemInfo => Response::SystemInfo(if webos {
+                        system_info_call()
+                    } else {
+                        Ok(crate::system_info::demo())
                     }),
                     Request::Uninstall(id) => {
                         // Validate again at the worker boundary, not just in the UI.
@@ -387,7 +394,16 @@ impl Platform {
 /// Read-only status snapshot: the helper queries several services, so allow it more time than
 /// a single Luna call, but never block the worker for long.
 fn tv_status_call() -> Result<crate::tv_status::TvStatus, String> {
-    let command = helper_command("tv-status", &[])?;
+    crate::tv_status::normalize(&read_only_helper("tv-status")?)
+}
+
+/// Same boundary as the picture status: one bounded, read-only helper run.
+fn system_info_call() -> Result<crate::system_info::SystemInfo, String> {
+    crate::system_info::normalize(&read_only_helper("tv-system")?)
+}
+
+fn read_only_helper(operation: &str) -> Result<Value, String> {
+    let command = helper_command(operation, &[])?;
     let payload = json!({"command": command});
     #[cfg(all(feature = "webos", target_os = "linux", target_arch = "arm"))]
     let result = crate::luna::call_with_timeout(
@@ -398,7 +414,7 @@ fn tv_status_call() -> Result<crate::tv_status::TvStatus, String> {
     #[cfg(not(all(feature = "webos", target_os = "linux", target_arch = "arm")))]
     let result = raw_call("luna://org.webosbrew.hbchannel.service/exec", &payload);
     let envelope = result.and_then(checked_response)?;
-    crate::tv_status::normalize(&command_reply(&envelope)?)
+    command_reply(&envelope)
 }
 
 /// Homebrew remains the privilege boundary for normal app jails. Each argument is shell-quoted

@@ -26,6 +26,8 @@ mod recents_view;
 
 pub struct Assets {
     pub root: PathBuf,
+    /// Kept for the hidden in-app update card; the Settings UI no longer shows it.
+    #[allow(dead_code)]
     pub version: String,
     pub metrics: BTreeMap<String, BTreeMap<char, f32>>,
     pub artwork: crate::app_artwork::Service,
@@ -1684,31 +1686,6 @@ fn filter(out: &mut Scene, state: &State, target: Target, rect: Rect, label: &st
 }
 
 /// The existing System status card owns the only update action.
-fn update_value(state: &State) -> String {
-    use crate::update::{InstallStatus, Status};
-    let language = state.preferences.language;
-    match &state.update {
-        InstallStatus::Idle => {
-            if let Some(version) = &state.available_update {
-                language.format("installUpdate", &[("version", version)])
-            } else {
-                language
-                    .t(if state.update_status == Status::Checking {
-                        "checkingUpdates"
-                    } else {
-                        "checkAgain"
-                    })
-                    .to_owned()
-            }
-        }
-        InstallStatus::Downloading(percent) => {
-            language.format("updateDownloading", &[("percent", &percent.to_string())])
-        }
-        InstallStatus::Installing(_) => language.t("updateInstalling").to_owned(),
-        InstallStatus::Failed(_) => language.t("updateFailed").to_owned(),
-    }
-}
-
 struct Row<'a> {
     target: Target,
     rect: Rect,
@@ -2381,6 +2358,25 @@ fn settings_content(out: &mut Scene, state: &State, assets: &Assets) {
                     }),
                     false,
                 ),
+                (
+                    7,
+                    "textRendering",
+                    "type",
+                    Some(language.t(state.preferences.text_rendering.label_key())),
+                    true,
+                ),
+                (
+                    3,
+                    if state.loading {
+                        "refreshNotice"
+                    } else {
+                        "refreshApps"
+                    },
+                    "refresh",
+                    None,
+                    false,
+                ),
+                (5, "quitApp", "power", None, false),
             ]
             .into_iter()
             .enumerate()
@@ -2555,108 +2551,173 @@ fn settings_content(out: &mut Scene, state: &State, assets: &Assets) {
                 );
             }
         }
-        SYSTEM_SECTION => {
-            let rect = Rect::new(640., 164.8 - s, 1120., 220.);
-            let title = if matches!(state.update, crate::update::InstallStatus::Failed(_)) {
-                "updateError"
-            } else if state.available_update.is_some() {
-                "updateAvailable"
-            } else {
-                match state.update_status {
-                    crate::update::Status::Unchecked => "checkForUpdates",
-                    crate::update::Status::Checking => "checkingUpdates",
-                    crate::update::Status::Checked => "latestVersionInstalled",
-                    crate::update::Status::Failed => "updateCheckFailed",
-                }
-            };
-            settings_surface(out, rect, 20.);
-            out.text(
-                language.t(title),
-                Rect::new(rect.x + 24.2, rect.y + 24., rect.w - 48.4, 34.),
-                text(24., 550, -0.02).leading(1.4),
-                WHITE,
-                false,
-            );
-            out.text(
-                if let Some(latest) = &state.available_update {
-                    language.format(
-                        "updateVersions",
-                        &[("current", assets.version.trim()), ("latest", latest)],
-                    )
-                } else {
-                    language.format("currentVersion", &[("current", assets.version.trim())])
-                },
-                Rect::new(rect.x + 24.2, rect.y + 74., rect.w - 48.4, 32.),
-                text(20.8, 450, -0.02).leading(1.4),
-                c(0xeeeeee, 0.73),
-                false,
-            );
-            row(
-                out,
-                state,
-                assets,
-                Row {
-                    target: if state.available_update.is_some() {
-                        Target::InstallUpdate
-                    } else {
-                        Target::CheckUpdates
-                    },
-                    rect: Rect::new(rect.x + 24., rect.y + 132., rect.w - 48., 64.),
-                    title: &update_value(state),
-                    icon: Some(if state.available_update.is_some() {
-                        "arrow"
-                    } else {
-                        "refresh"
-                    }),
-                    value: None,
-                    description: None,
-                    selected: false,
-                    chevron: false,
-                },
-            );
-            for (position, (index, title, icon, value, chevron)) in [
-                (
-                    3,
-                    language.t(if state.loading {
-                        "refreshNotice"
-                    } else {
-                        "refreshApps"
-                    }),
-                    "refresh",
-                    None,
-                    false,
-                ),
-                (
-                    7,
-                    language.t("textRendering"),
-                    "type",
-                    Some(language.t(state.preferences.text_rendering.label_key())),
-                    true,
-                ),
-                (5, language.t("quitApp"), "power", None, false),
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                row(
-                    out,
-                    state,
-                    assets,
-                    Row {
-                        target: Target::Setting(index),
-                        rect: Rect::new(640., 408.8 + position as f32 * 84. - s, 1120., 72.),
-                        title,
-                        icon: Some(icon),
-                        value,
-                        description: None,
-                        selected: false,
-                        chevron,
-                    },
-                );
-            }
-        }
+        SYSTEM_SECTION => system_settings(out, state, assets),
         PICTURE_SECTION => picture_settings(out, state, assets),
         _ => {}
+    }
+}
+
+/// One heading with a card of label/value lines; returns the y below it.
+fn reading_card(
+    out: &mut Scene,
+    heading: &str,
+    lines: &[(&str, String)],
+    column: (f32, f32),
+    y: f32,
+    label_share: f32,
+) -> f32 {
+    let (x, width) = column;
+    out.text(
+        heading.to_owned(),
+        Rect::new(x + 24., y, width - 48., 34.),
+        text(24., 550, -0.02).leading(1.4),
+        WHITE,
+        false,
+    );
+    let card = Rect::new(x, y + 44., width, lines.len() as f32 * 48. + 32.);
+    settings_surface(out, card, 20.);
+    for (index, (label, value)) in lines.iter().enumerate() {
+        let row_y = card.y + 16. + index as f32 * 48.;
+        out.text(
+            (*label).to_owned(),
+            Rect::new(card.x + 24., row_y + 6., card.w * label_share - 24., 36.),
+            text(20.8, 450, -0.02).leading(1.4),
+            c(0xeeeeee, 0.73),
+            false,
+        );
+        out.text(
+            value.clone(),
+            Rect::new(
+                card.x + card.w * label_share,
+                row_y + 6.,
+                card.w * (1. - label_share) - 24.,
+                36.,
+            ),
+            text(20.8, 550, -0.02).leading(1.4).right(),
+            WHITE,
+            false,
+        );
+    }
+    card.y + card.h + 28.
+}
+
+/// Read-only system readings, grouped like native-tv's Metrics menu.
+fn system_settings(out: &mut Scene, state: &State, assets: &Assets) {
+    use crate::system_info::size;
+    let language = state.preferences.language;
+    let s = state.scroll;
+    row(
+        out,
+        state,
+        assets,
+        Row {
+            target: Target::SystemRefresh,
+            rect: Rect::new(640., 164.8 - s, 1120., 72.),
+            title: language.t("tvRefresh"),
+            icon: Some("refresh"),
+            value: None,
+            description: None,
+            selected: false,
+            chevron: false,
+        },
+    );
+    let Some(info) = &state.system_info else {
+        out.text(
+            language.t(if state.system_info_error {
+                "tvFailed"
+            } else {
+                "tvReading"
+            }),
+            Rect::new(640., 264.8 - s, 1120., 40.),
+            text(20.8, 450, -0.02).leading(1.4),
+            c(0xeeeeee, 0.73),
+            false,
+        );
+        return;
+    };
+    let free_of = |free: Option<u64>, total: Option<u64>, key: &str| {
+        Some(language.format(key, &[("free", &size(free?)), ("total", &size(total?))]))
+    };
+    let keep = |lines: Vec<(&'static str, Option<String>)>| -> Vec<(&str, String)> {
+        lines
+            .into_iter()
+            .filter_map(|(key, value)| Some((language.t(key), value?)))
+            .collect()
+    };
+    let load = keep(vec![
+        (
+            "sysTemperature",
+            info.temperature_c.map(|v| format!("{v} °C")),
+        ),
+        ("sysCpuLoad", info.cpu_load.map(|v| format!("{v} %"))),
+        ("sysCpuFrequency", info.cpu_mhz.map(|v| format!("{v} MHz"))),
+        ("sysGpuClock", info.gpu_mhz.map(|v| format!("{v} MHz"))),
+        (
+            "sysPerCore",
+            (!info.core_loads.is_empty()).then(|| {
+                info.core_loads
+                    .iter()
+                    .map(|v| format!("{v}%"))
+                    .collect::<Vec<_>>()
+                    .join("  ")
+            }),
+        ),
+    ]);
+    let memory = keep(vec![
+        (
+            "sysMemoryFree",
+            free_of(info.memory_free_kb, info.memory_total_kb, "sysFreeOf"),
+        ),
+        (
+            "sysSwapFree",
+            free_of(info.swap_free_kb, info.swap_total_kb, "sysFreeOf"),
+        ),
+        (
+            "sysAppStorage",
+            free_of(
+                info.storage_free_kb,
+                info.storage_total_kb,
+                "sysStorageFree",
+            ),
+        ),
+        ("sysEmmc", info.emmc_health.clone()),
+    ]);
+    let tv = keep(vec![
+        ("sysModel", info.model.clone()),
+        ("sysFirmware", info.firmware.clone()),
+        ("sysWebos", info.webos.clone()),
+        ("sysSoc", info.soc.clone()),
+        ("sysRam", info.ram.clone()),
+        (
+            "sysPanelRefresh",
+            info.panel_refresh_hz.map(|v| format!("{v} Hz")),
+        ),
+        ("sysWifi", info.wifi.clone()),
+    ]);
+    // Two columns keep every reading on one 1080p screen.
+    let mut y = 260.8 - s;
+    if !load.is_empty() {
+        y = reading_card(out, language.t("sysLoad"), &load, (640., 600.), y, 0.55);
+    }
+    if !memory.is_empty() {
+        reading_card(
+            out,
+            language.t("sysMemoryStorage"),
+            &memory,
+            (640., 600.),
+            y,
+            0.5,
+        );
+    }
+    if !tv.is_empty() {
+        reading_card(
+            out,
+            language.t("sysThisTv"),
+            &tv,
+            (1264., 496.),
+            260.8 - s,
+            0.45,
+        );
     }
 }
 

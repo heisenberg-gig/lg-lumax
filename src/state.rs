@@ -50,6 +50,7 @@ pub enum Target {
     InstallUpdate,
     CheckUpdates,
     TvRefresh,
+    SystemRefresh,
     Recent(String),
     RecentEmpty,
     RecentRetry,
@@ -254,6 +255,9 @@ pub struct State {
     pub tv_status: Option<crate::tv_status::TvStatus>,
     pub tv_status_error: bool,
     pub tv_refresh_requested: bool,
+    pub system_info: Option<crate::system_info::SystemInfo>,
+    pub system_info_error: bool,
+    pub system_refresh_requested: bool,
 }
 
 impl State {
@@ -300,6 +304,9 @@ impl State {
             tv_status: None,
             tv_status_error: false,
             tv_refresh_requested: false,
+            system_info: None,
+            system_info_error: false,
+            system_refresh_requested: false,
         }
     }
 
@@ -672,6 +679,25 @@ impl State {
         }
     }
 
+    pub fn set_system_info(&mut self, result: Result<crate::system_info::SystemInfo, String>) {
+        match result {
+            Ok(info) => {
+                if self.system_info.as_ref() != Some(&info) || self.system_info_error {
+                    self.dirty = true;
+                }
+                self.system_info = Some(info);
+                self.system_info_error = false;
+            }
+            Err(error) => {
+                eprintln!("Luma system info: {error}");
+                if !self.system_info_error {
+                    self.dirty = true;
+                }
+                self.system_info_error = true;
+            }
+        }
+    }
+
     pub fn set_inputs(&mut self, inputs: Vec<crate::model::Input>) {
         if self.inventory.inputs == inputs {
             return;
@@ -1004,8 +1030,7 @@ impl State {
                     .unwrap_or(0),
             ),
             WIDGETS_SECTION => Target::Widget(4),
-            SYSTEM_SECTION if self.available_update.is_some() => Target::InstallUpdate,
-            SYSTEM_SECTION => Target::CheckUpdates,
+            SYSTEM_SECTION => Target::SystemRefresh,
             PICTURE_SECTION => Target::TvRefresh,
             _ => Target::Setting(0),
         }
@@ -2123,6 +2148,10 @@ impl State {
                     self.update = crate::update::InstallStatus::Downloading(0);
                     return vec![Effect::UpdateDownload(version)];
                 }
+            }
+            Target::SystemRefresh => {
+                self.system_refresh_requested = true;
+                self.dirty = true;
             }
             Target::TvRefresh => {
                 self.tv_refresh_requested = true;

@@ -360,45 +360,21 @@ try {
   const clockFocus = await scenario('clock-format-focus', `${clockEditor},enter,down`);
   assert.equal(clockFocus.subpage, 'ClockFormat');
   assert.deepEqual(clockFocus.focus, { Choice: 1 });
-  const system = await scenario(
-    'system-settings',
-    'settings,down,down,down,down,right,down,down,down',
+  const general = await scenario(
+    'general-settings',
+    'settings,down,enter,down,down,down,down,down,down',
   );
-  assert.deepEqual(system.focus, { Setting: 5 });
-  assert.ok(system.ui_text.includes('Refresh apps & inputs'));
+  assert.deepEqual(general.focus, { Setting: 5 });
+  assert.ok(general.ui_text.includes('Refresh apps & inputs'));
+  assert.ok(general.ui_text.includes('Quit app'));
+  assert.ok(general.ui_text.includes('Text rendering'));
+  const system = await scenario('system-settings', 'settings,down,down,down,down,right');
+  assert.equal(system.focus, 'SystemRefresh');
   assert.ok(!system.ui_text.includes('Luma update'));
-  assert.ok(system.ui_text.includes('Quit app'));
-  assert.ok(system.ui_text.includes('Text rendering'));
-  const updatePreview = await scenario('update-preview', 'settings,down,down,down,down,right', [
-    '--test-update-version',
-    '99.0.0',
-  ]);
-  assert.equal(updatePreview.focus, 'InstallUpdate');
-  assert.ok(updatePreview.ui_text.includes('Update available'));
-  assert.ok(updatePreview.ui_text.some((label) => label.includes('Latest: 99.0.0')));
-  assert.ok(updatePreview.ui_text.includes('Install 99.0.0'));
-  const afterUpdatePreview = await scenario(
-    'update-preview-cleared',
-    'settings,down,down,down,down,right',
-  );
-  assert.equal(afterUpdatePreview.focus, 'CheckUpdates');
-  assert.ok(!afterUpdatePreview.ui_text.includes('Update available'));
-  const currentVersion = JSON.parse(
-    await fs.readFile(path.join(root, 'package.json'), 'utf8'),
-  ).version;
-  const latestPreview = await scenario(
-    'update-current-preview',
-    'settings,down,down,down,down,right,enter',
-    ['--test-update-version', currentVersion],
-  );
-  assert.equal(latestPreview.focus, 'CheckUpdates');
-  assert.equal(latestPreview.update_status, 'checked');
-  assert.equal(latestPreview.available_update, null);
-  assert.ok(latestPreview.ui_text.includes('No newer version found'));
-  assert.ok(latestPreview.ui_text.includes('Check again'));
-  assert.ok(latestPreview.ui_text.includes(`Current version: ${currentVersion}`));
-  assert.ok(!latestPreview.ui_text.some((label) => label.startsWith('Luma v')));
-  const textOptions = 'settings,down,down,down,down,right,down,down,enter';
+  assert.ok(!system.ui_text.includes('Quit app'));
+  for (const label of ['Refresh status', 'Processor temperature', 'Memory free', 'Model'])
+    assert.ok(system.ui_text.includes(label), `System section shows ${label}`);
+  const textOptions = 'settings,down,enter,down,down,down,down,enter';
   const textRendering = await scenario('text-rendering-options', textOptions);
   assert.equal(textRendering.subpage, 'TextRendering');
   assert.deepEqual(textRendering.focus, { Choice: 0 });
