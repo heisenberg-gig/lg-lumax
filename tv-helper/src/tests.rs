@@ -1010,7 +1010,21 @@ fn tv_system_reads_files_storage_and_services_and_tolerates_gaps() {
         Ok(json!({"returnValue":true,"modelName":"OLED55C54LA"})),
     );
     f.reply("getStatus", Err("no network".into()));
+    f.reply(
+        "getDeviceInfo",
+        Ok(json!({"returnValue":true,"batteryLevel":70})),
+    );
+    f.put("/sys/block/mmcblk0/device/life_time", b"0x01 0x01\n");
+    f.put("/sys/class/net/wlan0/address", b"aa:bb:cc:dd:ee:ff\n");
+    f.put("/proc/net/dev", b"wlan0: 1 2 3 4 5 6 7 8 9\n");
+    f.put("/mnt/lg/cmn_data/btsvc/mrcu1.info", b"battery=55\n");
     let reply = metrics::collect(&f).unwrap();
+    assert_eq!(reply["emmc_life_time"], "0x01 0x01\n");
+    assert_eq!(reply["mac"]["wlan0"], "aa:bb:cc:dd:ee:ff\n");
+    assert!(reply["mac"]["eth0"].is_null());
+    assert_eq!(reply["remote"]["batteryLevel"], 70);
+    assert_eq!(reply["remote_pairing"], "battery=55\n");
+    assert!(reply["net_dev"].as_str().unwrap().starts_with("wlan0"));
     assert_eq!(reply["temperature"]["lg"], true);
     assert_eq!(reply["temperature"]["value"], "45\n");
     assert!(reply["meminfo"].as_str().unwrap().contains("MemTotal"));
@@ -1021,7 +1035,7 @@ fn tv_system_reads_files_storage_and_services_and_tolerates_gaps() {
             .contains("/mnt/lg/appstore")
     );
     assert_eq!(reply["properties"]["modelName"], "OLED55C54LA");
-    assert!(reply["connection"].is_null() && reply["emmc_life_time"].is_null());
+    assert!(reply["connection"].is_null() && reply["cpu_online"].is_null());
 }
 
 #[test]
@@ -1030,10 +1044,12 @@ fn tv_system_falls_back_to_the_thermal_zone_and_requires_root() {
     f.put("/sys/class/thermal/thermal_zone0/temp", b"51000\n");
     f.reply("getSystemProperties", Ok(json!({"returnValue":false})));
     f.reply("getStatus", Ok(json!({"returnValue":false})));
+    f.reply("getDeviceInfo", Ok(json!({"returnValue":false})));
     let reply = metrics::collect(&f).unwrap();
     assert_eq!(reply["temperature"]["lg"], false);
     assert_eq!(reply["temperature"]["value"], "51000\n");
     assert!(reply["storage"].is_null() && reply["properties"].is_null());
+    assert!(reply["remote"].is_null() && reply["remote_pairing"].is_null());
     f.uid.set(1000);
     assert!(metrics::collect(&f).is_err());
 }

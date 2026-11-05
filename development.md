@@ -1060,16 +1060,25 @@ its Settings integration is still tracked by that separate PR and requires `supp
 
 ### Settings → System (read-only metrics)
 
-The System section mirrors native-tv's Metrics menu and only reads. `luma-helper tv-system` returns
-raw text and replies: `/proc/meminfo`, the LG thermal file (thermal zone fallback),
-`/proc/lg/pm/frequency`, `/proc/lg/pm/status` (per-core load slots), `/proc/lg/sys/status` (GPU
-clock), the eMMC `life_time` file, `df -k /mnt/lg/appstore`, `environmentCondition`, `/etc/issue`,
-`systemproperty/getSystemProperties` and `connectionmanager/getStatus`. A missing source becomes
-`null`. `src/system_info.rs` parses them (tested in `src/system-info-tests.rs`) into Load (processor
-temperature, CPU load, CPU and GPU clocks, per-core load), Memory and storage (free memory, swap,
-app storage, eMMC health) and This TV (model, firmware, webOS, SoC, RAM, panel refresh, Wi-Fi).
-Readings the TV does not report are not shown. Refresh follows the Picture section. Remote battery
-and per-process metrics from native-tv are not included.
+The System section mirrors native-tv's Metrics menu and only reads; it has no controls and reads
+when it opens and every 10 seconds while visible. `luma-helper tv-system` returns raw text and
+replies: `/proc/meminfo`, the LG thermal file (thermal zone fallback), `/proc/lg/pm/frequency`,
+`/proc/lg/pm/status` (per-core load slots), `/proc/lg/sys/status` (GPU clock), the eMMC `life_time`
+file, `df -k /mnt/lg/appstore`, `environmentCondition`, `/etc/issue`,
+`systemproperty/getSystemProperties`, `connectionmanager/getStatus`, `/proc/net/dev`,
+`/proc/net/wireless`, the interface MAC addresses, `mrcu/getDeviceInfo` and the remote's pairing
+file. A missing source becomes `null`. Kernel files are read with `read_virtual`, which bounds the
+bytes read: `/sys` files advertise a whole page as their size and would fail the size check used
+for regular files.
+
+`src/system_info.rs` parses them (tested in `src/system-info-tests.rs`) into four cards: Load
+(temperature, CPU load, CPU and GPU clocks, per-core load), Network (link, internet, network name,
+IP, mask, gateway, DNS, signal, interface and MAC, traffic), Memory and storage (free memory, swap,
+app storage, eMMC health) and This TV (model, firmware, webOS, SoC, RAM, panel refresh, remote
+battery). Readings the TV does not report are not shown. The remote battery is the level the TV
+reports (`batteryLevel`, then the pairing file's `battery=` line unless it is a threshold such as
+`20 (low)`); native-tv also reads the level live over Bluetooth GATT on webOS 9 and 10, which is
+not included. Per-process metrics are not included either.
 
 ### Settings → Picture (read-only status)
 
@@ -1080,8 +1089,8 @@ A source that fails becomes `null`, so one missing service never hides the other
 `src/tv_status.rs` normalises the replies (pure parsing, tested in `src/tv-status-tests.rs`):
 picture mode, OLED light, brightness, contrast, colour, sharpness, black level, colour
 temperature, gamma, dynamic contrast and energy saving, plus the signal's HDR format, game mode and
-FreeSync. Settings the TV does not report are not shown. The section refreshes on entry, on request
-and every 10 seconds while visible. Picture-mode and HDR names are LG's own English terms.
+FreeSync. Settings the TV does not report are not shown. The section reads when it opens and every
+10 seconds while visible; it has no controls. Picture-mode and HDR names are LG's own English terms.
 
 The sections follow the native-tv menus: temperature, memory and storage belong to Metrics, panel
 hours and burn-in protections to OLED Care, and HDMI timing, VRR and ALLM to Game. They are added

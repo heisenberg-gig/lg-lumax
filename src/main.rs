@@ -1219,8 +1219,7 @@ fn run() -> Result<(), String> {
             && state.page == state::Page::Settings
             && state.section == state::PICTURE_SECTION
             && state.overlay.is_none();
-        let tv_forced = std::mem::take(&mut state.tv_refresh_requested) && tv_active;
-        if tv_poller.due(Instant::now(), tv_active, tv_forced) {
+        if tv_poller.due(Instant::now(), tv_active) {
             platform.send(Request::TvStatus);
         }
         let system_active = focused
@@ -1228,8 +1227,7 @@ fn run() -> Result<(), String> {
             && state.page == state::Page::Settings
             && state.section == state::SYSTEM_SECTION
             && state.overlay.is_none();
-        let system_forced = std::mem::take(&mut state.system_refresh_requested) && system_active;
-        if system_poller.due(Instant::now(), system_active, system_forced) {
+        if system_poller.due(Instant::now(), system_active) {
             platform.send(Request::SystemInfo);
         }
         weather_tick(&mut state, &weather_service, visible);

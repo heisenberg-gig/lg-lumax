@@ -278,6 +278,23 @@ pub fn read(system: &impl System, path: impl AsRef<Path>, limit: usize) -> Resul
     }
     Ok(bytes)
 }
+/// Reads a kernel-generated file (/proc, /sys). These report a size of 0 or a full page, so only
+/// the bytes actually read are bounded, never the advertised length.
+pub fn read_virtual(system: &impl System, path: impl AsRef<Path>, limit: usize) -> Result<Vec<u8>> {
+    let file = fs::File::open(system.path(path.as_ref()))
+        .map_err(|e| format!("{}: {e}", path.as_ref().display()))?;
+    if !file.metadata().map_err(|e| e.to_string())?.is_file() {
+        return Err("Not a regular file".into());
+    }
+    let mut bytes = vec![];
+    file.take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() > limit {
+        return Err("File size limit exceeded".into());
+    }
+    Ok(bytes)
+}
 pub fn json(system: &impl System, path: impl AsRef<Path>) -> Result<Value> {
     serde_json::from_slice(&read(system, path, 1024 * 1024)?).map_err(|e| e.to_string())
 }
@@ -372,5 +389,41 @@ pub fn link(
     {
         let _ = (system, source, target);
         Err("TV symlinks require Unix".into())
+    }
+}
+
+#[cfg(test)]
+mod virtual_file_tests {
+    use super::*;
+
+    struct Tmp(std::path::PathBuf);
+    impl System for Tmp {
+        fn run(&self, _: &str, _: &[String], _: std::time::Duration, _: usize) -> Result<Output> {
+            unreachable!()
+        }
+        fn path(&self, path: &Path) -> std::path::PathBuf {
+            self.0.join(path.strip_prefix("/").unwrap_or(path))
+        }
+        fn uid(&self) -> u32 {
+            0
+        }
+        fn pause(&self) {}
+        fn terminate(&self, _: u32) -> Result<()> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn read_virtual_bounds_the_bytes_read_not_the_advertised_size() {
+        let dir = std::env::temp_dir().join(format!("luma-virtual-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("small"), b"0x01 0x01\n").unwrap();
+        fs::write(dir.join("big"), vec![b'x'; 300]).unwrap();
+        let tmp = Tmp(dir.clone());
+        assert_eq!(read_virtual(&tmp, "/small", 256).unwrap(), b"0x01 0x01\n");
+        assert!(read_virtual(&tmp, "/big", 256).is_err());
+        assert!(read_virtual(&tmp, "/missing", 256).is_err());
+        assert!(read_virtual(&tmp, "/", 256).is_err());
+        let _ = fs::remove_dir_all(dir);
     }
 }

@@ -15,7 +15,17 @@ fn full() -> Value {
         "environment": "{\"boardTypeStr\":\"_O22_\",\"ddrSize\":\"3GB\",\"panelOutputFrameRate\":\"120\"}",
         "issue": "webOS TV 10.2.0 \\n \\l\n",
         "properties": {"modelName": "OLED55C54LA", "firmwareVersion": "33.22.45", "sdkVersion": "10.2.0"},
-        "connection": {"wifi": {"ssid": "Home"}},
+        "connection": {
+            "isInternetConnectionAvailable": true,
+            "wired": {"state": "disconnected"},
+            "wifi": {"state": "connected", "ssid": "Home", "ipAddress": "192.168.1.85",
+                "netmask": "255.255.255.0", "gateway": "192.168.1.1", "dns1": "192.168.1.1",
+                "dns2": "bad", "interfaceName": "wlan0"},
+        },
+        "net_dev": "Inter-|   Receive\n lo: 1 2 3 4 5 6 7 8 9\nwlan0: 5000 2 3 4 5 6 7 8 900 1\n",
+        "wireless": "Inter-| sta\n face | tus | link level\n wlan0: 0000   62.  -48.  -256 0 0\n",
+        "mac": {"wlan0": "AA:BB:CC:DD:EE:FF\n", "eth0": null},
+        "remote": {"returnValue": true, "batteryLevel": 80},
     })
 }
 
@@ -40,7 +50,71 @@ fn normalizes_a_complete_reply() {
     assert_eq!(info.soc.as_deref(), Some("Alpha 9 Gen 5 (O22)"));
     assert_eq!(info.ram.as_deref(), Some("3GB"));
     assert_eq!(info.panel_refresh_hz, Some(120));
-    assert_eq!(info.wifi.as_deref(), Some("Home"));
+    assert_eq!(info.remote_battery, Some(80));
+    let net = &info.network;
+    assert_eq!(net.link, Some(Link::Wifi));
+    assert_eq!(net.connected, Some(true));
+    assert_eq!(net.internet, Some(true));
+    assert_eq!(net.ssid.as_deref(), Some("Home"));
+    assert_eq!(net.ip.as_deref(), Some("192.168.1.85"));
+    assert_eq!(net.netmask.as_deref(), Some("255.255.255.0"));
+    assert_eq!(net.gateway.as_deref(), Some("192.168.1.1"));
+    assert_eq!(net.dns, ["192.168.1.1"], "invalid DNS entries are dropped");
+    assert_eq!((net.signal_quality, net.signal_dbm), (Some(62), Some(-48)));
+    assert_eq!(net.interface.as_deref(), Some("wlan0"));
+    assert_eq!(net.mac.as_deref(), Some("aa:bb:cc:dd:ee:ff"));
+    assert_eq!((net.rx_bytes, net.tx_bytes), (Some(5000), Some(900)));
+}
+
+#[test]
+fn wired_connections_use_the_ethernet_interface_and_hide_wifi_fields() {
+    let mut reply = full();
+    reply["connection"] = json!({
+        "wired": {"state": "connected", "ipAddress": "10.0.0.5", "interfaceName": "eth0"},
+        "wifi": {"state": "disconnected"},
+    });
+    reply["net_dev"] = json!("eth0: 10 2 3 4 5 6 7 8 20\n");
+    reply["mac"]["eth0"] = json!("00:00:5e:00:53:01\n");
+    let net = normalize(&reply).unwrap().network;
+    assert_eq!(net.link, Some(Link::Wired));
+    assert_eq!(net.ssid, None);
+    assert_eq!((net.signal_quality, net.signal_dbm), (None, None));
+    assert_eq!(net.interface.as_deref(), Some("eth0"));
+    assert_eq!(net.mac.as_deref(), Some("00:00:5e:00:53:01"));
+    assert_eq!((net.rx_bytes, net.tx_bytes), (Some(10), Some(20)));
+}
+
+#[test]
+fn network_gaps_and_bad_interface_names_are_safe() {
+    let mut reply = full();
+    reply["connection"] = Value::Null;
+    reply["net_dev"] = Value::Null;
+    assert_eq!(normalize(&reply).unwrap().network, Network::default());
+    reply["connection"] = json!({"wifi": {"state": "connected", "interfaceName": "../x; rm"}});
+    reply["wireless"] = json!("wlan0: 0000 0 0");
+    let net = normalize(&reply).unwrap().network;
+    assert_eq!(net.interface.as_deref(), Some("wlan0"));
+    assert_eq!(
+        net.signal_dbm, None,
+        "a driver with no reading reports nothing"
+    );
+}
+
+#[test]
+fn remote_battery_prefers_the_service_then_the_pairing_file() {
+    let mut reply = full();
+    reply["remote"] = json!({"batteryLevel": 150});
+    reply["remote_pairing"] = json!("name=LGE MR\nbattery=55\n");
+    assert_eq!(remote_battery(&reply), Some(55));
+    reply["remote_pairing"] = json!("battery=20 (low)\n");
+    assert_eq!(
+        remote_battery(&reply),
+        None,
+        "threshold lines are not a level"
+    );
+    reply["remote"] = json!({"batteryLevel": "73"});
+    assert_eq!(remote_battery(&reply), Some(73));
+    assert_eq!(remote_battery(&Value::Null), None);
 }
 
 #[test]

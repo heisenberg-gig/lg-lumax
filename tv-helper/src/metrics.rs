@@ -10,8 +10,9 @@ use std::time::Duration;
 
 const APP_STORAGE: &str = "/mnt/lg/appstore";
 
+/// Kernel files (/proc, /sys) are read by bytes: their advertised size is 0 or a whole page.
 fn file(system: &impl System, path: &str, limit: usize) -> Value {
-    system::read(system, path, limit)
+    system::read_virtual(system, path, limit)
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
         .map_or(Value::Null, Value::String)
@@ -22,6 +23,18 @@ fn service(system: &impl System, name: &str, method: &str, payload: Value) -> Va
         .ok()
         .filter(|reply| reply["returnValue"] == true)
         .unwrap_or(Value::Null)
+}
+
+/// The remote's pairing file differs between webOS releases; the first that exists wins.
+fn pairing(system: &impl System) -> Value {
+    [
+        "/mnt/lg/cmn_data/mrcu/mrcu1.info",
+        "/mnt/lg/cmn_data/btsvc/mrcu1.info",
+    ]
+    .iter()
+    .map(|path| file(system, path, 16 * 1024))
+    .find(|value| !value.is_null())
+    .unwrap_or(Value::Null)
 }
 
 fn storage(system: &impl System) -> Value {
@@ -69,5 +82,18 @@ pub fn collect(system: &impl System) -> Result<Value> {
             json!({"keys": ["modelName", "firmwareVersion", "boardType", "sdkVersion"]}),
         ),
         "connection": service(system, "com.palm.connectionmanager", "getStatus", json!({})),
+        "net_dev": file(system, "/proc/net/dev", 16 * 1024),
+        "wireless": file(system, "/proc/net/wireless", 16 * 1024),
+        "mac": {
+            "wlan0": file(system, "/sys/class/net/wlan0/address", 64),
+            "eth0": file(system, "/sys/class/net/eth0/address", 64),
+        },
+        "remote": service(
+            system,
+            "com.webos.service.mrcu",
+            "getDeviceInfo",
+            json!({"subscribe": false, "deviceName": "MagicRemote_1"}),
+        ),
+        "remote_pairing": pairing(system),
     }))
 }

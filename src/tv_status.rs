@@ -217,7 +217,7 @@ pub fn demo() -> TvStatus {
     }
 }
 
-/// Schedules Settings → TV reads: at once when the section opens or on request, then slowly.
+/// Schedules read-only section reads: at once when the section opens, then slowly.
 #[derive(Default)]
 pub struct Poller {
     next: Option<std::time::Instant>,
@@ -228,12 +228,12 @@ impl Poller {
     const INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
     const RETRY: std::time::Duration = std::time::Duration::from_secs(30);
 
-    pub fn due(&mut self, now: std::time::Instant, active: bool, forced: bool) -> bool {
+    pub fn due(&mut self, now: std::time::Instant, active: bool) -> bool {
         if !active {
             self.next = None;
             return false;
         }
-        if self.in_flight || !(forced || self.next.is_none_or(|next| now >= next)) {
+        if self.in_flight || !self.next.is_none_or(|next| now >= next) {
             return false;
         }
         self.in_flight = true;

@@ -3053,39 +3053,30 @@ fn tiles_edited_elsewhere_join_and_leave_home_like_tv_edits() {
 }
 
 #[test]
-fn tv_section_shows_status_requests_refresh_and_survives_a_failed_read() {
+fn picture_section_is_read_only_shows_status_and_survives_a_failed_read() {
     use crate::state::PICTURE_SECTION;
     let mut state = ready();
     state.open(2);
     state.focus(Target::Sidebar(PICTURE_SECTION), &[]);
-    assert_eq!(state.section, PICTURE_SECTION);
     state.activate();
-    assert_eq!(state.focus, Target::TvRefresh);
-    assert!(
-        controls(&state)
-            .iter()
-            .any(|c| c.target == Target::TvRefresh)
+    assert_eq!(state.section, PICTURE_SECTION);
+    assert_eq!(
+        state.focus,
+        Target::Sidebar(PICTURE_SECTION),
+        "nothing to focus in the page"
     );
-    assert!(state.activate().is_empty());
-    assert!(state.tv_refresh_requested);
     state.set_tv_status(Ok(crate::tv_status::demo()));
     assert!(state.tv_status.is_some() && !state.tv_status_error);
     state.set_tv_status(Err("offline".into()));
     assert!(state.tv_status.is_some() && state.tv_status_error);
-    // Only the refresh row is interactive; the status card never steals focus.
     let page = scene(&state);
-    assert_eq!(
-        page.controls
-            .iter()
-            .filter(|c| !matches!(
-                c.target,
-                Target::Sidebar(_) | Target::Nav(_) | Target::TvSettings
-            ))
-            .count(),
-        1
+    assert!(
+        page.controls.iter().all(|c| matches!(
+            c.target,
+            Target::Sidebar(_) | Target::Nav(_) | Target::TvSettings
+        )),
+        "the page adds no controls"
     );
-    state.direction(Direction::Left, &controls(&state));
-    assert_eq!(state.focus, Target::Sidebar(PICTURE_SECTION));
 }
 
 #[test]
@@ -3093,19 +3084,19 @@ fn tv_poller_reads_at_once_then_slowly_and_never_overlaps() {
     use std::time::{Duration, Instant};
     let mut poller = crate::tv_status::Poller::default();
     let now = Instant::now();
-    assert!(!poller.due(now, false, true));
-    assert!(poller.due(now, true, false));
-    assert!(!poller.due(now, true, true), "one read at a time");
+    assert!(!poller.due(now, false));
+    assert!(poller.due(now, true));
+    assert!(!poller.due(now, true), "one read at a time");
     poller.completed(now, true);
-    assert!(!poller.due(now + Duration::from_secs(5), true, false));
-    assert!(poller.due(now + Duration::from_secs(5), true, true));
+    assert!(!poller.due(now + Duration::from_secs(5), true));
+    assert!(poller.due(now + Duration::from_secs(11), true));
     poller.completed(now, false);
-    assert!(!poller.due(now + Duration::from_secs(29), true, false));
-    assert!(poller.due(now + Duration::from_secs(31), true, false));
+    assert!(!poller.due(now + Duration::from_secs(29), true));
+    assert!(poller.due(now + Duration::from_secs(31), true));
     poller.completed(now, true);
-    assert!(!poller.due(now, false, false));
+    assert!(!poller.due(now, false));
     assert!(
-        poller.due(now, true, false),
+        poller.due(now, true),
         "re-entering the section reads at once"
     );
 }
@@ -3139,31 +3130,29 @@ fn general_owns_text_rendering_refresh_and_quit_and_the_update_card_is_gone() {
 }
 
 #[test]
-fn system_section_shows_metrics_requests_refresh_and_survives_a_failed_read() {
+fn system_section_is_read_only_shows_metrics_and_survives_a_failed_read() {
     use crate::state::SYSTEM_SECTION;
     let mut state = ready();
     state.open(2);
     state.focus(Target::Sidebar(SYSTEM_SECTION), &[]);
     state.activate();
-    assert_eq!(state.focus, Target::SystemRefresh);
-    assert!(state.activate().is_empty());
-    assert!(state.system_refresh_requested);
+    assert_eq!(state.focus, Target::Sidebar(SYSTEM_SECTION));
     state.set_system_info(Ok(crate::system_info::demo()));
     assert!(state.system_info.is_some() && !state.system_info_error);
     state.set_system_info(Err("offline".into()));
     assert!(state.system_info.is_some() && state.system_info_error);
     let page = scene(&state);
-    assert_eq!(
-        page.controls
-            .iter()
-            .filter(|c| !matches!(
-                c.target,
-                Target::Sidebar(_) | Target::Nav(_) | Target::TvSettings
-            ))
-            .count(),
-        1,
-        "only the refresh row is interactive"
+    assert!(
+        page.controls.iter().all(|c| matches!(
+            c.target,
+            Target::Sidebar(_) | Target::Nav(_) | Target::TvSettings
+        )),
+        "the page adds no controls"
     );
-    state.direction(Direction::Left, &controls(&state));
-    assert_eq!(state.focus, Target::Sidebar(SYSTEM_SECTION));
+    state.direction(Direction::Right, &controls(&state));
+    assert_eq!(
+        state.focus,
+        Target::Sidebar(SYSTEM_SECTION),
+        "Right stays on the sidebar"
+    );
 }

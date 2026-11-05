@@ -2551,8 +2551,8 @@ fn settings_content(out: &mut Scene, state: &State, assets: &Assets) {
                 );
             }
         }
-        SYSTEM_SECTION => system_settings(out, state, assets),
-        PICTURE_SECTION => picture_settings(out, state, assets),
+        SYSTEM_SECTION => system_settings(out, state),
+        PICTURE_SECTION => picture_settings(out, state),
         _ => {}
     }
 }
@@ -2564,8 +2564,8 @@ fn reading_card(
     lines: &[(&str, String)],
     column: (f32, f32),
     y: f32,
-    label_share: f32,
 ) -> f32 {
+    const LINE: f32 = 42.;
     let (x, width) = column;
     out.text(
         heading.to_owned(),
@@ -2574,25 +2574,20 @@ fn reading_card(
         WHITE,
         false,
     );
-    let card = Rect::new(x, y + 44., width, lines.len() as f32 * 48. + 32.);
+    let card = Rect::new(x, y + 44., width, lines.len() as f32 * LINE + 24.);
     settings_surface(out, card, 20.);
     for (index, (label, value)) in lines.iter().enumerate() {
-        let row_y = card.y + 16. + index as f32 * 48.;
+        let row_y = card.y + 12. + index as f32 * LINE;
         out.text(
             (*label).to_owned(),
-            Rect::new(card.x + 24., row_y + 6., card.w * label_share - 24., 36.),
+            Rect::new(card.x + 24., row_y + 3., card.w * 0.46 - 24., 36.),
             text(20.8, 450, -0.02).leading(1.4),
             c(0xeeeeee, 0.73),
             false,
         );
         out.text(
             value.clone(),
-            Rect::new(
-                card.x + card.w * label_share,
-                row_y + 6.,
-                card.w * (1. - label_share) - 24.,
-                36.,
-            ),
+            Rect::new(card.x + card.w * 0.46, row_y + 3., card.w * 0.54 - 24., 36.),
             text(20.8, 550, -0.02).leading(1.4).right(),
             WHITE,
             false,
@@ -2601,26 +2596,11 @@ fn reading_card(
     card.y + card.h + 28.
 }
 
-/// Read-only system readings, grouped like native-tv's Metrics menu.
-fn system_settings(out: &mut Scene, state: &State, assets: &Assets) {
-    use crate::system_info::size;
+/// Read-only system readings, grouped like native-tv's Metrics menu plus the connection.
+fn system_settings(out: &mut Scene, state: &State) {
+    use crate::system_info::{Link, size};
     let language = state.preferences.language;
     let s = state.scroll;
-    row(
-        out,
-        state,
-        assets,
-        Row {
-            target: Target::SystemRefresh,
-            rect: Rect::new(640., 164.8 - s, 1120., 72.),
-            title: language.t("tvRefresh"),
-            icon: Some("refresh"),
-            value: None,
-            description: None,
-            selected: false,
-            chevron: false,
-        },
-    );
     let Some(info) = &state.system_info else {
         out.text(
             language.t(if state.system_info_error {
@@ -2628,7 +2608,7 @@ fn system_settings(out: &mut Scene, state: &State, assets: &Assets) {
             } else {
                 "tvReading"
             }),
-            Rect::new(640., 264.8 - s, 1120., 40.),
+            Rect::new(640., 168.8 - s, 1120., 40.),
             text(20.8, 450, -0.02).leading(1.4),
             c(0xeeeeee, 0.73),
             false,
@@ -2692,54 +2672,94 @@ fn system_settings(out: &mut Scene, state: &State, assets: &Assets) {
             "sysPanelRefresh",
             info.panel_refresh_hz.map(|v| format!("{v} Hz")),
         ),
-        ("sysWifi", info.wifi.clone()),
+        (
+            "sysRemoteBattery",
+            info.remote_battery.map(|v| format!("{v} %")),
+        ),
+    ]);
+    let net = &info.network;
+    let link = net.link.map(|link| {
+        let kind = language.t(if link == Link::Wired {
+            "netWired"
+        } else {
+            "netWifi"
+        });
+        match net.connected {
+            Some(connected) => format!(
+                "{kind} · {}",
+                language.t(if connected {
+                    "netConnected"
+                } else {
+                    "netDisconnected"
+                })
+            ),
+            None => kind.to_owned(),
+        }
+    });
+    let network = keep(vec![
+        ("netLink", link),
+        (
+            "netInternet",
+            net.internet.map(|on| {
+                language
+                    .t(if on { "netOnline" } else { "netOffline" })
+                    .to_owned()
+            }),
+        ),
+        ("netName", net.ssid.clone()),
+        ("netIp", net.ip.clone()),
+        ("netMask", net.netmask.clone()),
+        ("netGateway", net.gateway.clone()),
+        ("netDns", (!net.dns.is_empty()).then(|| net.dns.join(", "))),
+        (
+            "netSignal",
+            net.signal_dbm
+                .zip(net.signal_quality)
+                .map(|(dbm, quality)| {
+                    language.format(
+                        "netSignalValue",
+                        &[("dbm", &dbm.to_string()), ("quality", &quality.to_string())],
+                    )
+                }),
+        ),
+        (
+            "netInterface",
+            match (&net.interface, &net.mac) {
+                (Some(name), Some(mac)) => Some(format!("{name} · {mac}")),
+                (Some(name), None) => Some(name.clone()),
+                _ => None,
+            },
+        ),
+        (
+            "netTraffic",
+            net.rx_bytes
+                .zip(net.tx_bytes)
+                .map(|(rx, tx)| format!("RX {} · TX {}", size(rx / 1024), size(tx / 1024))),
+        ),
     ]);
     // Two columns keep every reading on one 1080p screen.
-    let mut y = 260.8 - s;
+    let top = 164.8 - s;
+    let (left, right) = ((640., 548.), (1212., 548.));
+    let mut y = top;
     if !load.is_empty() {
-        y = reading_card(out, language.t("sysLoad"), &load, (640., 600.), y, 0.55);
+        y = reading_card(out, language.t("sysLoad"), &load, left, y);
     }
+    if !network.is_empty() {
+        reading_card(out, language.t("netHeading"), &network, left, y);
+    }
+    let mut y = top;
     if !memory.is_empty() {
-        reading_card(
-            out,
-            language.t("sysMemoryStorage"),
-            &memory,
-            (640., 600.),
-            y,
-            0.5,
-        );
+        y = reading_card(out, language.t("sysMemoryStorage"), &memory, right, y);
     }
     if !tv.is_empty() {
-        reading_card(
-            out,
-            language.t("sysThisTv"),
-            &tv,
-            (1264., 496.),
-            260.8 - s,
-            0.45,
-        );
+        reading_card(out, language.t("sysThisTv"), &tv, right, y);
     }
 }
 
 /// Read-only picture status. Names such as picture modes and HDR formats are LG's own terms.
-fn picture_settings(out: &mut Scene, state: &State, assets: &Assets) {
+fn picture_settings(out: &mut Scene, state: &State) {
     let language = state.preferences.language;
     let s = state.scroll;
-    row(
-        out,
-        state,
-        assets,
-        Row {
-            target: Target::TvRefresh,
-            rect: Rect::new(640., 164.8 - s, 1120., 72.),
-            title: language.t("tvRefresh"),
-            icon: Some("refresh"),
-            value: None,
-            description: None,
-            selected: false,
-            chevron: false,
-        },
-    );
     let Some(status) = &state.tv_status else {
         out.text(
             language.t(if state.tv_status_error {
@@ -2747,7 +2767,7 @@ fn picture_settings(out: &mut Scene, state: &State, assets: &Assets) {
             } else {
                 "tvReading"
             }),
-            Rect::new(640., 264.8 - s, 1120., 40.),
+            Rect::new(640., 168.8 - s, 1120., 40.),
             text(20.8, 450, -0.02).leading(1.4),
             c(0xeeeeee, 0.73),
             false,
@@ -2785,7 +2805,7 @@ fn picture_settings(out: &mut Scene, state: &State, assets: &Assets) {
     .collect();
     // Two columns keep every reading on one 1080p screen: settings on the left, signal beside it.
     let line = 48.;
-    let top = 260.8 - s;
+    let top = 164.8 - s;
     for (column, (heading, lines)) in [("tvImage", picture), ("tvSignal", signal)]
         .into_iter()
         .enumerate()
