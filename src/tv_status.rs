@@ -233,7 +233,7 @@ impl Poller {
             self.next = None;
             return false;
         }
-        if self.in_flight || !self.next.is_none_or(|next| now >= next) {
+        if self.in_flight || self.next.is_some_and(|next| now < next) {
             return false;
         }
         self.in_flight = true;
