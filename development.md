@@ -1054,6 +1054,18 @@ support from #142. Manifest takeover remains limited to webOS
 10/11. The optional `tv-input` subcommand implements the #124 registration/verification contract;
 its Settings integration is still tracked by that separate PR and requires `supportGIP`.
 
+### Settings → TV (read-only status)
+
+The TV section only reads. Luma asks Homebrew Channel's root `exec` service to run
+`luma-helper tv-status`, which collects raw replies from `com.webos.service.settings`
+(`getSystemSettings`, picture category), `videooutput/getStatus`, `panelcontroller/getPanelUsageTime`,
+`/proc/lg/pm/temperature` (thermal zone fallback) and `/proc/meminfo`. A source that fails becomes
+`null`, so one missing service never hides the others. `src/tv_status.rs` normalises the replies
+(pure parsing, tested in `src/tv-status-tests.rs`) and the section refreshes on entry, on request and
+every 10 seconds while visible. Picture-mode and HDR names are LG's own English terms. Panel hours
+are the panel usage counter divided by 6 (ten-minute units). HDMI resolution, refresh rate, VRR and
+ALLM need kernel receiver facts and are intentionally not part of this read-only phase.
+
 The former VM tests for interpreter code are replaced by filesystem and service fixtures in
 `tv-helper/src/tests.rs`. They do not call a TV, real LS2 service or network. Host helper executables
 reject TV operations; only ARM webOS builds can perform them. Use `cargo test -p luma-tv-helper`

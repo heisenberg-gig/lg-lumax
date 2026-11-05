@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 
 pub const WIDGETS_SECTION: usize = 2;
 pub const SYSTEM_SECTION: usize = 3;
-pub const SECTION_COUNT: usize = 4;
+pub const TV_SECTION: usize = 4;
+pub const SECTION_COUNT: usize = 5;
 pub const SETTINGS_BOTTOM_PADDING: f32 = 64.;
 pub const SETTINGS_LIST_BOTTOM_PADDING: f32 = 48.;
 pub const APPS_COLUMNS: usize = 6;
@@ -48,6 +49,7 @@ pub enum Target {
     TvSettings,
     InstallUpdate,
     CheckUpdates,
+    TvRefresh,
     Recent(String),
     RecentEmpty,
     RecentRetry,
@@ -248,6 +250,10 @@ pub struct State {
     pub greeting_name_draft: String,
     pub input_name: String,
     pub recents: crate::recents::Recents,
+    /// Latest Settings → TV snapshot; kept across failed refreshes.
+    pub tv_status: Option<crate::tv_status::TvStatus>,
+    pub tv_status_error: bool,
+    pub tv_refresh_requested: bool,
 }
 
 impl State {
@@ -291,6 +297,9 @@ impl State {
             greeting_name_draft: String::new(),
             input_name: String::new(),
             recents: crate::recents::Recents::default(),
+            tv_status: None,
+            tv_status_error: false,
+            tv_refresh_requested: false,
         }
     }
 
@@ -644,6 +653,25 @@ impl State {
     }
 
     /// Replace only input status; leave installed apps, artwork and saved preferences alone.
+    pub fn set_tv_status(&mut self, result: Result<crate::tv_status::TvStatus, String>) {
+        match result {
+            Ok(status) => {
+                if self.tv_status.as_ref() != Some(&status) || self.tv_status_error {
+                    self.dirty = true;
+                }
+                self.tv_status = Some(status);
+                self.tv_status_error = false;
+            }
+            Err(error) => {
+                eprintln!("Luma TV status: {error}");
+                if !self.tv_status_error {
+                    self.dirty = true;
+                }
+                self.tv_status_error = true;
+            }
+        }
+    }
+
     pub fn set_inputs(&mut self, inputs: Vec<crate::model::Input>) {
         if self.inventory.inputs == inputs {
             return;
@@ -978,6 +1006,7 @@ impl State {
             WIDGETS_SECTION => Target::Widget(4),
             SYSTEM_SECTION if self.available_update.is_some() => Target::InstallUpdate,
             SYSTEM_SECTION => Target::CheckUpdates,
+            TV_SECTION => Target::TvRefresh,
             _ => Target::Setting(0),
         }
     }
@@ -2094,6 +2123,10 @@ impl State {
                     self.update = crate::update::InstallStatus::Downloading(0);
                     return vec![Effect::UpdateDownload(version)];
                 }
+            }
+            Target::TvRefresh => {
+                self.tv_refresh_requested = true;
+                self.dirty = true;
             }
             Target::CheckUpdates => {
                 if !self.update_busy() {

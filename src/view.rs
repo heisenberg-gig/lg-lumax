@@ -6,7 +6,7 @@ use crate::{
     state::{
         APPS_COLUMNS, Control, HOME_FADE_LEFT, HOME_FADE_RIGHT, HOME_STRIP_LEFT, HOME_STRIP_RIGHT,
         HOME_TILE_PITCH, HOME_TILE_WIDTH, KEYS, Overlay, Page, Rect, SYSTEM_SECTION, State,
-        Subpage, Target, TextField, WIDGETS_SECTION,
+        Subpage, TV_SECTION, Target, TextField, WIDGETS_SECTION,
     },
     weather::{self, Unit},
 };
@@ -2103,7 +2103,7 @@ fn settings(out: &mut Scene, state: &State, assets: &Assets) {
 
 fn settings_sidebar(out: &mut Scene, state: &State, assets: &Assets) {
     let language = state.preferences.language;
-    for (index, key) in ["interface", "background", "widgets", "system"]
+    for (index, key) in ["interface", "background", "widgets", "system", "tv"]
         .into_iter()
         .enumerate()
     {
@@ -2655,7 +2655,107 @@ fn settings_content(out: &mut Scene, state: &State, assets: &Assets) {
                 );
             }
         }
+        TV_SECTION => tv_settings(out, state, assets),
         _ => {}
+    }
+}
+
+/// Read-only TV status. Names such as picture modes and HDR formats are LG's own terms.
+fn tv_settings(out: &mut Scene, state: &State, assets: &Assets) {
+    let language = state.preferences.language;
+    let s = state.scroll;
+    row(
+        out,
+        state,
+        assets,
+        Row {
+            target: Target::TvRefresh,
+            rect: Rect::new(640., 164.8 - s, 1120., 72.),
+            title: language.t("tvRefresh"),
+            icon: Some("refresh"),
+            value: None,
+            description: None,
+            selected: false,
+            chevron: false,
+        },
+    );
+    let Some(status) = &state.tv_status else {
+        out.text(
+            language.t(if state.tv_status_error {
+                "tvFailed"
+            } else {
+                "tvReading"
+            }),
+            Rect::new(640., 264.8 - s, 1120., 40.),
+            text(20.8, 450, -0.02).leading(1.4),
+            c(0xeeeeee, 0.73),
+            false,
+        );
+        return;
+    };
+    let on_off = |value: Option<bool>| {
+        value.map(|on| {
+            language
+                .t(if on { "stateOn" } else { "stateOff" })
+                .to_owned()
+        })
+    };
+    let hours = |hours: u32| language.format("tvHours", &[("hours", &hours.to_string())]);
+    let lines = [
+        ("tvPictureMode", status.picture_mode.clone()),
+        ("tvOledLight", status.oled_light.map(|v| format!("{v}"))),
+        (
+            "tvEnergySaving",
+            status.energy_saving.as_deref().map(|key| {
+                if key == "off" {
+                    language.t("stateOff").to_owned()
+                } else {
+                    crate::tv_status::spell(key)
+                }
+            }),
+        ),
+        ("tvHdr", status.hdr.clone()),
+        ("tvGameMode", on_off(status.game_mode)),
+        ("tvFreesync", on_off(status.freesync)),
+        (
+            "tvTemperature",
+            status.temperature_c.map(|v| format!("{v} °C")),
+        ),
+        (
+            "tvMemory",
+            status
+                .memory_used_mb
+                .zip(status.memory_total_mb)
+                .map(|(used, total)| format!("{used} / {total} MB")),
+        ),
+        ("tvPanelHours", status.panel_hours.map(hours)),
+    ];
+    let line = 52.;
+    let card = Rect::new(640., 260.8 - s, 1120., lines.len() as f32 * line + 32.);
+    settings_surface(out, card, 20.);
+    for (index, (key, value)) in lines.into_iter().enumerate() {
+        let y = card.y + 16. + index as f32 * line;
+        if index > 0 && index % 3 == 0 {
+            out.shape(
+                Rect::new(card.x + 24., y - 1., card.w - 48., 1.),
+                0.,
+                c(0xffffff, 0.07),
+            );
+        }
+        out.text(
+            language.t(key),
+            Rect::new(card.x + 24., y + 8., 460., 36.),
+            text(20.8, 450, -0.02).leading(1.4),
+            c(0xeeeeee, 0.73),
+            false,
+        );
+        out.text(
+            value.unwrap_or_else(|| "—".into()),
+            Rect::new(card.x + 500., y + 8., card.w - 524., 36.),
+            text(20.8, 550, -0.02).leading(1.4).right(),
+            WHITE,
+            false,
+        );
     }
 }
 

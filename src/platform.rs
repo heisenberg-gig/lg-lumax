@@ -175,6 +175,7 @@ pub fn redirect_to_home() -> Result<bool, String> {
 pub enum Request {
     Refresh,
     RefreshInputs,
+    TvStatus,
     Launch(String),
     Uninstall(String),
     SyncSplash(String),
@@ -186,6 +187,7 @@ pub enum Request {
 pub enum Response {
     Inventory(Result<(Inventory, Option<String>), String>),
     Inputs(Result<Vec<Input>, String>),
+    TvStatus(Result<crate::tv_status::TvStatus, String>),
     Launched(Result<(), String>),
     Uninstalled {
         id: String,
@@ -257,6 +259,11 @@ impl Platform {
                         input_inventory()
                     } else {
                         Ok(desktop_inventory.inputs.clone())
+                    }),
+                    Request::TvStatus => Response::TvStatus(if webos {
+                        tv_status_call()
+                    } else {
+                        Ok(crate::tv_status::demo())
                     }),
                     Request::Uninstall(id) => {
                         // Validate again at the worker boundary, not just in the UI.
@@ -375,6 +382,23 @@ impl Platform {
             self.send(Request::SyncSplash(background.to_owned()));
         }
     }
+}
+
+/// Read-only status snapshot: the helper queries several services, so allow it more time than
+/// a single Luna call, but never block the worker for long.
+fn tv_status_call() -> Result<crate::tv_status::TvStatus, String> {
+    let command = helper_command("tv-status", &[])?;
+    let payload = json!({"command": command});
+    #[cfg(all(feature = "webos", target_os = "linux", target_arch = "arm"))]
+    let result = crate::luna::call_with_timeout(
+        "luna://org.webosbrew.hbchannel.service/exec",
+        &payload,
+        std::time::Duration::from_secs(25),
+    );
+    #[cfg(not(all(feature = "webos", target_os = "linux", target_arch = "arm")))]
+    let result = raw_call("luna://org.webosbrew.hbchannel.service/exec", &payload);
+    let envelope = result.and_then(checked_response)?;
+    crate::tv_status::normalize(&command_reply(&envelope)?)
 }
 
 /// Homebrew remains the privilege boundary for normal app jails. Each argument is shell-quoted
