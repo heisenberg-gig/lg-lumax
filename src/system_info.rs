@@ -24,7 +24,34 @@ pub struct SystemInfo {
     pub soc: Option<String>,
     pub ram: Option<String>,
     pub panel_refresh_hz: Option<u32>,
-    pub wifi: Option<String>,
+    pub remote_battery: Option<u32>,
+    pub network: Network,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Link {
+    #[default]
+    Wifi,
+    Wired,
+}
+
+/// The active connection; fields the TV does not report stay `None`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Network {
+    pub link: Option<Link>,
+    pub connected: Option<bool>,
+    pub internet: Option<bool>,
+    pub ssid: Option<String>,
+    pub ip: Option<String>,
+    pub netmask: Option<String>,
+    pub gateway: Option<String>,
+    pub dns: Vec<String>,
+    pub signal_quality: Option<u32>,
+    pub signal_dbm: Option<i32>,
+    pub interface: Option<String>,
+    pub mac: Option<String>,
+    pub rx_bytes: Option<u64>,
+    pub tx_bytes: Option<u64>,
 }
 
 impl SystemInfo {
@@ -138,7 +165,6 @@ fn core_loads(status: &Value, online: &Value) -> Vec<u32> {
 fn emmc_health(raw: &Value) -> Option<String> {
     let health = text(raw)?
         .split_whitespace()
-        .take(2)
         .filter_map(|token| u32::from_str_radix(token.trim_start_matches("0x"), 16).ok())
         .filter(|value| (1..=11).contains(value))
         .map(|value| if value == 11 { 0 } else { 100 - value * 10 })
@@ -198,6 +224,144 @@ fn webos(reply: &Value) -> Option<String> {
         .or_else(|| clean(&reply["properties"]["sdkVersion"]))
 }
 
+fn address(value: &Value) -> Option<String> {
+    text(value)?
+        .parse::<std::net::Ipv4Addr>()
+        .ok()
+        .map(|ip| ip.to_string())
+}
+
+fn mac(value: &Value) -> Option<String> {
+    let mac = text(value)?.to_lowercase();
+    let valid = mac.len() == 17
+        && mac.bytes().enumerate().all(|(i, b)| {
+            if i % 3 == 2 {
+                b == b':'
+            } else {
+                b.is_ascii_hexdigit()
+            }
+        })
+        && mac != "00:00:00:00:00:00";
+    valid.then_some(mac)
+}
+
+/// `/proc/net/dev` row of one interface: (received bytes, transmitted bytes).
+fn traffic(raw: &Value, interface: &str) -> Option<(u64, u64)> {
+    text(raw)?.lines().find_map(|line| {
+        let (name, rest) = line.split_once(':')?;
+        if name.trim() != interface {
+            return None;
+        }
+        let values: Vec<&str> = rest.split_whitespace().collect();
+        Some((unsigned(values.first()?)?, unsigned(values.get(8)?)?))
+    })
+}
+
+/// `/proc/net/wireless` row: (link quality, signal in dBm). A driver with no reading reports 0 0.
+fn wireless(raw: &Value, interface: &str) -> Option<(u32, i32)> {
+    text(raw)?.lines().find_map(|line| {
+        let (name, rest) = line.split_once(':')?;
+        if name.trim() != interface {
+            return None;
+        }
+        let mut fields = rest.split_whitespace().skip(1);
+        let quality: f64 = fields.next()?.trim_end_matches('.').parse().ok()?;
+        let level: f64 = fields.next()?.trim_end_matches('.').parse().ok()?;
+        if quality == 0. && level == 0. {
+            return None;
+        }
+        let dbm = if level > 127. { level - 256. } else { level };
+        ((0. ..=1000.).contains(&quality) && (-130. ..=0.).contains(&dbm))
+            .then_some((quality as u32, dbm as i32))
+    })
+}
+
+fn network(reply: &Value) -> Network {
+    let connection = &reply["connection"];
+    let state = |side: &str| text(&connection[side]["state"]).map(|s| s == "connected");
+    let link = if state("wired") == Some(true) {
+        Some(Link::Wired)
+    } else if connection["wifi"].is_object() {
+        Some(Link::Wifi)
+    } else if connection["wired"].is_object() {
+        Some(Link::Wired)
+    } else {
+        None
+    };
+    let (side, default_interface) = match link {
+        Some(Link::Wired) => ("wired", "eth0"),
+        _ => ("wifi", "wlan0"),
+    };
+    let entry = &connection[side];
+    let interface = clean(&entry["interfaceName"])
+        .filter(|name| {
+            name.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_')
+        })
+        .unwrap_or_else(|| default_interface.into());
+    let wifi_signal = (side == "wifi")
+        .then(|| wireless(&reply["wireless"], &interface))
+        .flatten();
+    let traffic = traffic(&reply["net_dev"], &interface);
+    let dns = ["dns1", "dns2"]
+        .iter()
+        .filter_map(|key| address(&entry[*key]))
+        .collect();
+    Network {
+        link,
+        connected: state(side),
+        internet: connection["isInternetConnectionAvailable"].as_bool(),
+        ssid: (side == "wifi").then(|| clean(&entry["ssid"])).flatten(),
+        ip: address(&entry["ipAddress"]),
+        netmask: address(&entry["netmask"]),
+        gateway: address(&entry["gateway"]),
+        dns,
+        signal_quality: wifi_signal.map(|s| s.0),
+        signal_dbm: wifi_signal.map(|s| s.1),
+        mac: mac(&reply["mac"][&interface]),
+        interface: Some(interface),
+        rx_bytes: traffic.map(|t| t.0),
+        tx_bytes: traffic.map(|t| t.1),
+    }
+    .or_empty()
+}
+
+impl Network {
+    /// A reply with no connection data at all reports nothing, not a bare interface name.
+    fn or_empty(self) -> Self {
+        if self.link.is_none() && self.ip.is_none() && self.rx_bytes.is_none() {
+            Self::default()
+        } else {
+            self
+        }
+    }
+}
+
+fn remote_battery(reply: &Value) -> Option<u32> {
+    let level = |value: &Value| {
+        value
+            .as_u64()
+            .or_else(|| text(value).and_then(unsigned))
+            .filter(|level| *level <= 100)
+            .map(|level| level as u32)
+    };
+    level(&reply["remote"]["batteryLevel"]).or_else(|| {
+        // The pairing file's `battery=` line; newer webOS writes a threshold such as `20 (low)`.
+        text(&reply["remote_pairing"])?.lines().find_map(|line| {
+            let (key, value) = line.split_once('=')?;
+            if !key.trim().eq_ignore_ascii_case("battery") {
+                return None;
+            }
+            let value = value.trim();
+            let digits: String = value.chars().take_while(char::is_ascii_digit).collect();
+            let rest = value[digits.len()..].trim_start();
+            (!digits.is_empty() && !rest.starts_with('('))
+                .then(|| level(&Value::String(digits)))
+                .flatten()
+        })
+    })
+}
+
 pub fn normalize(reply: &Value) -> Result<SystemInfo, String> {
     if !reply.is_object() {
         return Err("Invalid system reply".into());
@@ -242,7 +406,8 @@ pub fn normalize(reply: &Value) -> Result<SystemInfo, String> {
             .or_else(|| text(&environment["panelOutputFrameRate"]).and_then(unsigned))
             .filter(|hz| (1..=1000).contains(hz))
             .map(|hz| hz as u32),
-        wifi: clean(&reply["connection"]["wifi"]["ssid"]),
+        remote_battery: remote_battery(reply),
+        network: network(reply),
     };
     if info.is_empty() {
         return Err("The TV returned no system information".into());
@@ -282,7 +447,23 @@ pub fn demo() -> SystemInfo {
         soc: Some("Alpha 9 Gen 7 (O24)".into()),
         ram: Some("3GB".into()),
         panel_refresh_hz: Some(120),
-        wifi: Some("Home Wi-Fi".into()),
+        remote_battery: Some(80),
+        network: Network {
+            link: Some(Link::Wifi),
+            connected: Some(true),
+            internet: Some(true),
+            ssid: Some("Home Wi-Fi".into()),
+            ip: Some("192.168.1.85".into()),
+            netmask: Some("255.255.255.0".into()),
+            gateway: Some("192.168.1.1".into()),
+            dns: vec!["192.168.1.1".into(), "1.1.1.1".into()],
+            signal_quality: Some(62),
+            signal_dbm: Some(-48),
+            interface: Some("wlan0".into()),
+            mac: Some("00:00:5e:00:53:01".into()),
+            rx_bytes: Some(5_972_719_000),
+            tx_bytes: Some(691_308_700),
+        },
     }
 }
 

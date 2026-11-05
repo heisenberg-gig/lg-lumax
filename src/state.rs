@@ -49,8 +49,6 @@ pub enum Target {
     TvSettings,
     InstallUpdate,
     CheckUpdates,
-    TvRefresh,
-    SystemRefresh,
     Recent(String),
     RecentEmpty,
     RecentRetry,
@@ -254,10 +252,8 @@ pub struct State {
     /// Latest Settings → TV snapshot; kept across failed refreshes.
     pub tv_status: Option<crate::tv_status::TvStatus>,
     pub tv_status_error: bool,
-    pub tv_refresh_requested: bool,
     pub system_info: Option<crate::system_info::SystemInfo>,
     pub system_info_error: bool,
-    pub system_refresh_requested: bool,
 }
 
 impl State {
@@ -303,10 +299,8 @@ impl State {
             recents: crate::recents::Recents::default(),
             tv_status: None,
             tv_status_error: false,
-            tv_refresh_requested: false,
             system_info: None,
             system_info_error: false,
-            system_refresh_requested: false,
         }
     }
 
@@ -1030,8 +1024,8 @@ impl State {
                     .unwrap_or(0),
             ),
             WIDGETS_SECTION => Target::Widget(4),
-            SYSTEM_SECTION => Target::SystemRefresh,
-            PICTURE_SECTION => Target::TvRefresh,
+            // Read-only pages have nothing to focus, so the sidebar keeps focus.
+            SYSTEM_SECTION | PICTURE_SECTION => Target::Sidebar(self.section),
             _ => Target::Setting(0),
         }
     }
@@ -2148,14 +2142,6 @@ impl State {
                     self.update = crate::update::InstallStatus::Downloading(0);
                     return vec![Effect::UpdateDownload(version)];
                 }
-            }
-            Target::SystemRefresh => {
-                self.system_refresh_requested = true;
-                self.dirty = true;
-            }
-            Target::TvRefresh => {
-                self.tv_refresh_requested = true;
-                self.dirty = true;
             }
             Target::CheckUpdates => {
                 if !self.update_busy() {

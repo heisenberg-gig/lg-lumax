@@ -369,10 +369,18 @@ try {
   assert.ok(general.ui_text.includes('Quit app'));
   assert.ok(general.ui_text.includes('Text rendering'));
   const system = await scenario('system-settings', 'settings,down,down,down,down,right');
-  assert.equal(system.focus, 'SystemRefresh');
+  assert.deepEqual(system.focus, { Sidebar: 3 });
   assert.ok(!system.ui_text.includes('Luma update'));
   assert.ok(!system.ui_text.includes('Quit app'));
-  for (const label of ['Refresh status', 'Processor temperature', 'Memory free', 'Model'])
+  assert.ok(!system.ui_text.includes('Refresh status'));
+  for (const label of [
+    'Temperature',
+    'Memory free',
+    'eMMC health',
+    'Remote battery',
+    'IP address',
+    'Network name',
+  ])
     assert.ok(system.ui_text.includes(label), `System section shows ${label}`);
   const textOptions = 'settings,down,enter,down,down,down,down,enter';
   const textRendering = await scenario('text-rendering-options', textOptions);
