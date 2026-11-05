@@ -189,7 +189,8 @@ pub enum Response {
     Inventory(Result<(Inventory, Option<String>), String>),
     Inputs(Result<Vec<Input>, String>),
     TvStatus(Result<crate::tv_status::TvStatus, String>),
-    SystemInfo(Result<crate::system_info::SystemInfo, String>),
+    /// Boxed: the readings are much larger than the other replies.
+    SystemInfo(Result<Box<crate::system_info::SystemInfo>, String>),
     Launched(Result<(), String>),
     Uninstalled {
         id: String,
@@ -267,11 +268,14 @@ impl Platform {
                     } else {
                         Ok(crate::tv_status::demo())
                     }),
-                    Request::SystemInfo => Response::SystemInfo(if webos {
-                        system_info_call()
-                    } else {
-                        Ok(crate::system_info::demo())
-                    }),
+                    Request::SystemInfo => Response::SystemInfo(
+                        if webos {
+                            system_info_call()
+                        } else {
+                            Ok(crate::system_info::demo())
+                        }
+                        .map(Box::new),
+                    ),
                     Request::Uninstall(id) => {
                         // Validate again at the worker boundary, not just in the UI.
                         let result = uninstall_request(&id).and_then(|(_, _)| {

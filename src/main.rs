@@ -1147,7 +1147,7 @@ fn run() -> Result<(), String> {
                 }
                 Response::SystemInfo(result) => {
                     system_poller.completed(Instant::now(), result.is_ok());
-                    state.set_system_info(result);
+                    state.set_system_info(result.map(|info| *info));
                 }
                 Response::Launched(result) => {
                     state.launching = false;
