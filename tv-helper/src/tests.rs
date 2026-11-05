@@ -955,3 +955,34 @@ fn persistent_preferences_win_over_package_local_migration_and_active_stages_ref
         b"prism"
     );
 }
+
+#[test]
+fn tv_status_reads_the_whole_picture_category_and_keeps_going_when_one_source_fails() {
+    let f = Fixture::new();
+    f.reply(
+        "getSystemSettings",
+        Ok(json!({"returnValue":true,"settings":{"pictureMode":"cinema","backlight":"80"}})),
+    );
+    f.reply("getStatus", Err("videooutput unavailable".into()));
+    let reply = status::collect(&f).unwrap();
+    assert_eq!(reply["returnValue"], true);
+    assert_eq!(reply["picture"]["settings"]["pictureMode"], "cinema");
+    assert!(reply["video"].is_null());
+    let calls = f.calls.borrow();
+    assert!(
+        calls.iter().any(|call| call.contains("getSystemSettings")
+            && call.ends_with(r#"{"category":"picture"}"#))
+    );
+}
+
+#[test]
+fn tv_status_tolerates_refused_services_and_requires_root() {
+    let f = Fixture::new();
+    for method in ["getSystemSettings", "getStatus"] {
+        f.reply(method, Ok(json!({"returnValue":false})));
+    }
+    let reply = status::collect(&f).unwrap();
+    assert!(reply["picture"].is_null() && reply["video"].is_null());
+    f.uid.set(1000);
+    assert!(status::collect(&f).is_err());
+}

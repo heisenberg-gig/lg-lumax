@@ -933,6 +933,8 @@ fn system_category_owns_refresh_and_quit_and_restores_sidebar_focus() {
     state.back();
     assert_eq!(state.focus, Target::Sidebar(crate::state::SYSTEM_SECTION));
     state.direction(Direction::Down, &controls(&state));
+    assert_eq!(state.focus, Target::Sidebar(crate::state::PICTURE_SECTION));
+    state.direction(Direction::Down, &controls(&state));
     assert_eq!(state.focus, Target::Sidebar(0));
     assert_eq!(state.section, 0);
 }
@@ -2356,7 +2358,7 @@ fn widgets_group_existing_settings_and_restore_each_parent_without_changing_pref
     }]);
     let saved = serde_json::to_value(&state.preferences).unwrap();
     state.open(2);
-    assert_eq!(SECTION_COUNT, 4);
+    assert_eq!(SECTION_COUNT, 5);
     assert!(
         !controls(&state)
             .iter()
@@ -2450,7 +2452,7 @@ fn widgets_are_localized_without_legacy_sidebar_entries() {
                 .iter()
                 .filter(|c| matches!(c.target, Target::Sidebar(_)))
                 .count(),
-            4
+            5
         );
         assert_eq!(
             page.controls
@@ -3268,4 +3270,62 @@ fn update_card_shows_progress_restores_retry_and_ignores_presses_while_busy() {
     assert_eq!(state.update, InstallStatus::Idle);
     state.install_response(Response::Finished(Ok(())));
     assert_eq!(state.update_status, Status::Unchecked);
+}
+
+#[test]
+fn tv_section_shows_status_requests_refresh_and_survives_a_failed_read() {
+    use crate::state::PICTURE_SECTION;
+    let mut state = ready();
+    state.open(2);
+    state.focus(Target::Sidebar(PICTURE_SECTION), &[]);
+    assert_eq!(state.section, PICTURE_SECTION);
+    state.activate();
+    assert_eq!(state.focus, Target::TvRefresh);
+    assert!(
+        controls(&state)
+            .iter()
+            .any(|c| c.target == Target::TvRefresh)
+    );
+    assert!(state.activate().is_empty());
+    assert!(state.tv_refresh_requested);
+    state.set_tv_status(Ok(crate::tv_status::demo()));
+    assert!(state.tv_status.is_some() && !state.tv_status_error);
+    state.set_tv_status(Err("offline".into()));
+    assert!(state.tv_status.is_some() && state.tv_status_error);
+    // Only the refresh row is interactive; the status card never steals focus.
+    let page = scene(&state);
+    assert_eq!(
+        page.controls
+            .iter()
+            .filter(|c| !matches!(
+                c.target,
+                Target::Sidebar(_) | Target::Nav(_) | Target::TvSettings
+            ))
+            .count(),
+        1
+    );
+    state.direction(Direction::Left, &controls(&state));
+    assert_eq!(state.focus, Target::Sidebar(PICTURE_SECTION));
+}
+
+#[test]
+fn tv_poller_reads_at_once_then_slowly_and_never_overlaps() {
+    use std::time::{Duration, Instant};
+    let mut poller = crate::tv_status::Poller::default();
+    let now = Instant::now();
+    assert!(!poller.due(now, false, true));
+    assert!(poller.due(now, true, false));
+    assert!(!poller.due(now, true, true), "one read at a time");
+    poller.completed(now, true);
+    assert!(!poller.due(now + Duration::from_secs(5), true, false));
+    assert!(poller.due(now + Duration::from_secs(5), true, true));
+    poller.completed(now, false);
+    assert!(!poller.due(now + Duration::from_secs(29), true, false));
+    assert!(poller.due(now + Duration::from_secs(31), true, false));
+    poller.completed(now, true);
+    assert!(!poller.due(now, false, false));
+    assert!(
+        poller.due(now, true, false),
+        "re-entering the section reads at once"
+    );
 }

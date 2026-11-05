@@ -1054,6 +1054,22 @@ support from #142. Manifest takeover remains limited to webOS
 10/11. The optional `tv-input` subcommand implements the #124 registration/verification contract;
 its Settings integration is still tracked by that separate PR and requires `supportGIP`.
 
+### Settings → Picture (read-only status)
+
+The Picture section only reads. Luma asks Homebrew Channel's root `exec` service to run
+`luma-helper tv-status`, which returns the raw replies of `com.webos.service.settings`
+(`getSystemSettings`, whole picture category) and `com.webos.service.videooutput/getStatus`.
+A source that fails becomes `null`, so one missing service never hides the other.
+`src/tv_status.rs` normalises the replies (pure parsing, tested in `src/tv-status-tests.rs`):
+picture mode, OLED light, brightness, contrast, colour, sharpness, black level, colour
+temperature, gamma, dynamic contrast and energy saving, plus the signal's HDR format, game mode and
+FreeSync. Settings the TV does not report are not shown. The section refreshes on entry, on request
+and every 10 seconds while visible. Picture-mode and HDR names are LG's own English terms.
+
+The sections follow the native-tv menus: temperature, memory and storage belong to Metrics, panel
+hours and burn-in protections to OLED Care, and HDMI timing, VRR and ALLM to Game. They are added
+as their own sections, not here.
+
 The former VM tests for interpreter code are replaced by filesystem and service fixtures in
 `tv-helper/src/tests.rs`. They do not call a TV, real LS2 service or network. Host helper executables
 reject TV operations; only ARM webOS builds can perform them. Use `cargo test -p luma-tv-helper`

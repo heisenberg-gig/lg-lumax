@@ -28,6 +28,7 @@ mod storage;
 mod text_rendering;
 #[path = "tile-editor.rs"]
 mod tile_editor;
+mod tv_status;
 mod update;
 mod vector;
 mod view;
@@ -955,6 +956,7 @@ fn run() -> Result<(), String> {
     // When to ask for the inventory again after a failed load (State::inventory_failed).
     let mut inventory_retry: Option<Instant> = None;
     let mut input_refresh = input_refresh::Refresh::default();
+    let mut tv_poller = tv_status::Poller::default();
     let scripted_input = !options.script.is_empty();
     let mut scene = compose(
         &mut state,
@@ -1133,6 +1135,10 @@ fn run() -> Result<(), String> {
                         eprintln!("Luma HDMI refresh: {error}");
                     }
                 }
+                Response::TvStatus(result) => {
+                    tv_poller.completed(Instant::now(), result.is_ok());
+                    state.set_tv_status(result);
+                }
                 Response::Launched(result) => {
                     state.launching = false;
                     match result {
@@ -1197,6 +1203,15 @@ fn run() -> Result<(), String> {
                 }
             };
             state.notify(state.preferences.language.format(key, &[("tile", &title)]));
+        }
+        let tv_active = focused
+            && visible
+            && state.page == state::Page::Settings
+            && state.section == state::PICTURE_SECTION
+            && state.overlay.is_none();
+        let tv_forced = std::mem::take(&mut state.tv_refresh_requested) && tv_active;
+        if tv_poller.due(Instant::now(), tv_active, tv_forced) {
+            platform.send(Request::TvStatus);
         }
         weather_tick(&mut state, &weather_service, visible);
         if std::mem::take(&mut state.update_check_requested) {
