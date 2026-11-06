@@ -8,10 +8,12 @@ use crate::weather::{self, Unit};
 use serde::Serialize;
 use std::time::{Duration, Instant};
 
-pub const WIDGETS_SECTION: usize = 2;
-pub const SYSTEM_SECTION: usize = 3;
-pub const PICTURE_SECTION: usize = 4;
-pub const SECTION_COUNT: usize = 5;
+// The sidebar order: General, Background, Picture, OLED Care, Widgets, System.
+pub const PICTURE_SECTION: usize = 2;
+pub const OLED_SECTION: usize = 3;
+pub const WIDGETS_SECTION: usize = 4;
+pub const SYSTEM_SECTION: usize = 5;
+pub const SECTION_COUNT: usize = 6;
 pub const SETTINGS_BOTTOM_PADDING: f32 = 64.;
 pub const SETTINGS_LIST_BOTTOM_PADDING: f32 = 48.;
 pub const APPS_COLUMNS: usize = 6;
@@ -254,6 +256,8 @@ pub struct State {
     pub tv_status_error: bool,
     pub system_info: Option<crate::system_info::SystemInfo>,
     pub system_info_error: bool,
+    pub oled_care: Option<crate::oled_care::OledCare>,
+    pub oled_care_error: bool,
 }
 
 impl State {
@@ -301,6 +305,8 @@ impl State {
             tv_status_error: false,
             system_info: None,
             system_info_error: false,
+            oled_care: None,
+            oled_care_error: false,
         }
     }
 
@@ -692,6 +698,25 @@ impl State {
         }
     }
 
+    pub fn set_oled_care(&mut self, result: Result<crate::oled_care::OledCare, String>) {
+        match result {
+            Ok(care) => {
+                if self.oled_care.as_ref() != Some(&care) || self.oled_care_error {
+                    self.dirty = true;
+                }
+                self.oled_care = Some(care);
+                self.oled_care_error = false;
+            }
+            Err(error) => {
+                eprintln!("Luma OLED care: {error}");
+                if !self.oled_care_error {
+                    self.dirty = true;
+                }
+                self.oled_care_error = true;
+            }
+        }
+    }
+
     pub fn set_inputs(&mut self, inputs: Vec<crate::model::Input>) {
         if self.inventory.inputs == inputs {
             return;
@@ -1025,7 +1050,7 @@ impl State {
             ),
             WIDGETS_SECTION => Target::Widget(4),
             // Read-only pages have nothing to focus, so the sidebar keeps focus.
-            SYSTEM_SECTION | PICTURE_SECTION => Target::Sidebar(self.section),
+            SYSTEM_SECTION | PICTURE_SECTION | OLED_SECTION => Target::Sidebar(self.section),
             _ => Target::Setting(0),
         }
     }

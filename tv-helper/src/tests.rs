@@ -1002,6 +1002,36 @@ fn tv_status_tolerates_refused_services_and_requires_root() {
 }
 
 #[test]
+fn tv_oled_reads_panel_services_and_records_and_tolerates_gaps() {
+    let f = Fixture::new();
+    f.put("/mnt/lg/cmn_data/pnwash/autoOffRsLastTime", b"1418\n");
+    f.put("/mnt/lg/cmn_data/pnwash/completedOffRsCount", b"112");
+    f.reply(
+        "getPanelUsageTime",
+        Ok(json!({"returnValue":true,"panelUsageTimeStore":8440,"panelUsageTime":8514})),
+    );
+    f.reply(
+        "getGlobalStressReduction",
+        Ok(json!({"returnValue":true,"enable":true,"stressCount":4})),
+    );
+    f.reply("getTemporalPeakControl", Err("oledepl unavailable".into()));
+    f.reply(
+        "getSystemSettings",
+        Ok(json!({"returnValue":true,"settings":{"screenShift":"on"}})),
+    );
+    let reply = oled::collect(&f).unwrap();
+    assert_eq!(reply["panel"]["panelUsageTime"], 8514);
+    assert_eq!(reply["gsr"]["stressCount"], 4);
+    assert!(reply["tpc"].is_null());
+    assert_eq!(reply["picture"]["settings"]["screenShift"], "on");
+    assert_eq!(reply["records"]["autoOffRsLastTime"], "1418\n");
+    assert_eq!(reply["records"]["completedOffRsCount"], "112");
+    assert!(reply["records"]["autoJbInterval"].is_null());
+    f.uid.set(1000);
+    assert!(oled::collect(&f).is_err());
+}
+
+#[test]
 fn tv_system_reads_files_storage_and_services_and_tolerates_gaps() {
     let f = Fixture::new();
     f.put("/proc/lg/pm/temperature", b"45\n");

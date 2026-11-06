@@ -4,6 +4,7 @@ pub mod files;
 pub mod home;
 pub mod input;
 pub mod metrics;
+pub mod oled;
 pub mod status;
 pub mod system;
 pub mod uninstall;

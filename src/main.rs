@@ -16,6 +16,7 @@ mod input_refresh;
 #[cfg(all(feature = "webos", target_os = "linux", target_arch = "arm"))]
 mod luna;
 mod model;
+mod oled_care;
 mod platform;
 mod raster;
 mod recents;
@@ -963,6 +964,7 @@ fn run() -> Result<(), String> {
     let mut input_refresh = input_refresh::Refresh::default();
     let mut tv_poller = tv_status::Poller::default();
     let mut system_poller = tv_status::Poller::default();
+    let mut oled_poller = tv_status::Poller::default();
     let scripted_input = !options.script.is_empty();
     let mut scene = compose(
         &mut state,
@@ -1149,6 +1151,10 @@ fn run() -> Result<(), String> {
                     system_poller.completed(Instant::now(), result.is_ok());
                     state.set_system_info(result.map(|info| *info));
                 }
+                Response::OledCare(result) => {
+                    oled_poller.completed(Instant::now(), result.is_ok());
+                    state.set_oled_care(result.map(|care| *care));
+                }
                 Response::Launched(result) => {
                     state.launching = false;
                     match result {
@@ -1229,6 +1235,14 @@ fn run() -> Result<(), String> {
             && state.overlay.is_none();
         if system_poller.due(Instant::now(), system_active) {
             platform.send(Request::SystemInfo);
+        }
+        let oled_active = focused
+            && visible
+            && state.page == state::Page::Settings
+            && state.section == state::OLED_SECTION
+            && state.overlay.is_none();
+        if oled_poller.due(Instant::now(), oled_active) {
+            platform.send(Request::OledCare);
         }
         weather_tick(&mut state, &weather_service, visible);
         if std::mem::take(&mut state.update_check_requested) {

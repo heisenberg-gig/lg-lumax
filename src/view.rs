@@ -5,7 +5,7 @@ use crate::{
     renderer::{Color, Draw, TextStyle, WHITE},
     state::{
         APPS_COLUMNS, Control, HOME_FADE_LEFT, HOME_FADE_RIGHT, HOME_STRIP_LEFT, HOME_STRIP_RIGHT,
-        HOME_TILE_PITCH, HOME_TILE_WIDTH, KEYS, Overlay, PICTURE_SECTION, Page, Rect,
+        HOME_TILE_PITCH, HOME_TILE_WIDTH, KEYS, OLED_SECTION, Overlay, PICTURE_SECTION, Page, Rect,
         SYSTEM_SECTION, State, Subpage, Target, TextField, WIDGETS_SECTION,
     },
     weather::{self, Unit},
@@ -2080,9 +2080,16 @@ fn settings(out: &mut Scene, state: &State, assets: &Assets) {
 
 fn settings_sidebar(out: &mut Scene, state: &State, assets: &Assets) {
     let language = state.preferences.language;
-    for (index, key) in ["interface", "background", "widgets", "system", "picture"]
-        .into_iter()
-        .enumerate()
+    for (index, key) in [
+        "interface",
+        "background",
+        "picture",
+        "oled",
+        "widgets",
+        "system",
+    ]
+    .into_iter()
+    .enumerate()
     {
         let label = language.t(key);
         let rect = Rect::new(160., 164.8 + index as f32 * 84., 403.2, 72.);
@@ -2553,6 +2560,7 @@ fn settings_content(out: &mut Scene, state: &State, assets: &Assets) {
         }
         SYSTEM_SECTION => system_settings(out, state),
         PICTURE_SECTION => picture_settings(out, state),
+        OLED_SECTION => oled_settings(out, state),
         _ => {}
     }
 }
@@ -2594,6 +2602,93 @@ fn reading_card(
         );
     }
     card.y + card.h + 28.
+}
+
+/// Read-only OLED panel care: wear and countdowns on the left, protections on the right.
+fn oled_settings(out: &mut Scene, state: &State) {
+    let language = state.preferences.language;
+    let s = state.scroll;
+    let Some(care) = &state.oled_care else {
+        out.text(
+            language.t(if state.oled_care_error {
+                "tvFailed"
+            } else {
+                "tvReading"
+            }),
+            Rect::new(640., 168.8 - s, 1120., 40.),
+            text(20.8, 450, -0.02).leading(1.4),
+            c(0xeeeeee, 0.73),
+            false,
+        );
+        return;
+    };
+    let on_off = |value: Option<bool>| {
+        value.map(|on| {
+            language
+                .t(if on { "stateOn" } else { "stateOff" })
+                .to_owned()
+        })
+    };
+    let level = |value: &Option<String>| {
+        value.as_ref().map(|raw| {
+            match raw.as_str() {
+                "off" => language.t("stateOff"),
+                "low" => language.t("tvLow"),
+                "medium" => language.t("tvMedium"),
+                "high" => language.t("tvHigh"),
+                other => other,
+            }
+            .to_owned()
+        })
+    };
+    let hours = |value: Option<u64>| value.map(|hours| format!("{hours} h"));
+    let keep = |lines: Vec<(&'static str, Option<String>)>| -> Vec<(&str, String)> {
+        lines
+            .into_iter()
+            .filter_map(|(key, value)| Some((language.t(key), value?)))
+            .collect()
+    };
+    let panel = keep(vec![
+        ("oledHours", hours(care.panel_hours)),
+        (
+            "oledMaintenance",
+            care.maintenance_secs.map(crate::system_info::duration),
+        ),
+        ("oledRefresher", hours(care.refresher_hours)),
+        (
+            "oledMaintenanceCycles",
+            care.maintenance_cycles.map(|count| count.to_string()),
+        ),
+        (
+            "oledRefresherCycles",
+            care.refresher_cycles.map(|count| count.to_string()),
+        ),
+        ("oledFailures", care.failures.map(|count| count.to_string())),
+    ]);
+    let protections = keep(vec![
+        ("oledScreenShift", on_off(care.screen_shift)),
+        ("oledLogoDimming", level(&care.logo_dimming)),
+        ("oledAsbl", on_off(care.asbl)),
+        ("oledGsr", on_off(care.gsr)),
+        (
+            "oledGsrEvents",
+            care.gsr_stress_events.map(|count| count.to_string()),
+        ),
+        ("oledScheduledCleaning", on_off(care.scheduled_cleaning)),
+    ]);
+    let top = 164.8 - s;
+    if !panel.is_empty() {
+        reading_card(out, language.t("oledPanel"), &panel, (640., 548.), top);
+    }
+    if !protections.is_empty() {
+        reading_card(
+            out,
+            language.t("oledProtections"),
+            &protections,
+            (1212., 548.),
+            top,
+        );
+    }
 }
 
 /// Read-only system readings, grouped like native-tv's Metrics menu plus the connection.
@@ -3797,7 +3892,7 @@ mod tests {
         let assets = assets();
         let mut state = State::new(Preferences::default());
         state.open(2);
-        state.section = 2;
+        state.section = WIDGETS_SECTION;
         state.subpage = Some(Subpage::DateFormat);
         for language in Language::ALL {
             state.preferences.language = language;
@@ -3814,7 +3909,7 @@ mod tests {
                     .iter()
                     .filter_map(|draw| match draw {
                         Draw::Text(label, rect, style, color, _)
-                            if (rect.y - 356.3).abs() < 0.001 =>
+                            if (rect.y - 524.3).abs() < 0.001 =>
                         {
                             Some((label, rect, style, color))
                         }
@@ -3832,7 +3927,7 @@ mod tests {
                     .iter()
                     .filter_map(|draw| match draw {
                         Draw::TintedImage(_, rect, _, _, color)
-                            if (rect.y - 359.8).abs() < 0.001 =>
+                            if (rect.y - 527.8).abs() < 0.001 =>
                         {
                             assert_eq!(color, parts[0].3);
                             Some(rect)
