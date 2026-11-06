@@ -232,6 +232,26 @@ pub fn command(system: &impl System, program: &str, args: &[&str]) -> Result<()>
     }
 }
 pub fn luna(system: &impl System, service: &str, method: &str, payload: &Value) -> Result<Value> {
+    luna_call(system, service, method, payload, true)
+}
+
+/// Like `luna`, for services (tvpower) that omit `returnValue` on success.
+pub fn luna_unflagged(
+    system: &impl System,
+    service: &str,
+    method: &str,
+    payload: &Value,
+) -> Result<Value> {
+    luna_call(system, service, method, payload, false)
+}
+
+fn luna_call(
+    system: &impl System,
+    service: &str,
+    method: &str,
+    payload: &Value,
+    require_flag: bool,
+) -> Result<Value> {
     let uri = format!("luna://{service}/{method}");
     let result = system.run(
         "/usr/bin/luna-send",
@@ -257,7 +277,7 @@ pub fn luna(system: &impl System, service: &str, method: &str, payload: &Value) 
     }
     let reply: Value =
         serde_json::from_slice(&result.stdout).map_err(|e| format!("{uri}: invalid JSON: {e}"))?;
-    if !reply.is_object() || !reply["returnValue"].is_boolean() {
+    if !reply.is_object() || (require_flag && !reply["returnValue"].is_boolean()) {
         return Err(format!("{uri}: invalid reply"));
     }
     Ok(reply)

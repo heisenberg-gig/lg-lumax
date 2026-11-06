@@ -24,7 +24,14 @@ fn file(system: &impl System, path: &str, limit: usize) -> Value {
 fn service(system: &impl System, name: &str, method: &str, payload: Value) -> Value {
     system::luna(system, name, method, &payload)
         .ok()
-        // tvpower omits `returnValue` on success; only an explicit `false` is a failure.
+        .filter(|reply| reply["returnValue"] == true)
+        .unwrap_or(Value::Null)
+}
+
+/// tvpower omits `returnValue` on success; only an explicit `false` is a failure.
+fn unflagged_service(system: &impl System, name: &str, method: &str, payload: Value) -> Value {
+    system::luna_unflagged(system, name, method, &payload)
+        .ok()
         .filter(|reply| reply["returnValue"] != false)
         .unwrap_or(Value::Null)
 }
@@ -101,6 +108,6 @@ pub fn collect(system: &impl System) -> Result<Value> {
         "remote_pairing": pairing(system),
         "remote_saved": file(system, NATIVE_TV_BATTERY, 4 * 1024),
         // `time.ontime` counts seconds since the TV last powered on (0 in standby).
-        "power": service(system, "com.webos.service.tvpower", "power/getPowerOnTime", json!({})),
+        "power": unflagged_service(system, "com.webos.service.tvpower", "power/getPowerOnTime", json!({})),
     }))
 }
