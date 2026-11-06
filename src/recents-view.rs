@@ -134,6 +134,19 @@ pub fn render(out: &mut Scene, state: &State, assets: &Assets) {
         }
     }
 
+    if !recent.entries.is_empty() && recent.error.is_none() {
+        let label = language.t("closeAll");
+        let width = assets.width(label, text(21., 550, -0.01)) + 74.;
+        button(
+            out,
+            state,
+            assets,
+            Target::RecentCloseAll,
+            Rect::new(960. - width / 2., 900., width, 60.),
+            "close",
+            label,
+        );
+    }
     if recent.error.is_some() {
         if !recent.entries.is_empty() {
             out.text(

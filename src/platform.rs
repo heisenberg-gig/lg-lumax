@@ -231,19 +231,32 @@ impl Platform {
                         command,
                     } => {
                         let result = if webos {
-                            recent_call(&command).and_then(|reply| {
-                                if command == crate::recents::Command::List {
-                                    crate::recents::normalize(&reply).map(Some)
-                                } else {
-                                    Ok(None)
-                                }
-                            })
+                            if let crate::recents::Command::CloseAll(ids) = &command {
+                                ids.iter()
+                                    .try_for_each(|id| {
+                                        recent_call(&crate::recents::Command::Close(id.clone()))
+                                            .map(|_| ())
+                                    })
+                                    .map(|_| None)
+                            } else {
+                                recent_call(&command).and_then(|reply| {
+                                    if command == crate::recents::Command::List {
+                                        crate::recents::normalize(&reply).map(Some)
+                                    } else {
+                                        Ok(None)
+                                    }
+                                })
+                            }
                         } else {
                             // Isolated in-memory history; desktop actions never call a TV.
                             match &command {
                                 crate::recents::Command::List => Ok(Some(desktop_recents.clone())),
                                 crate::recents::Command::Close(id) => {
                                     desktop_recents.retain(|entry| &entry.app.id != id);
+                                    Ok(None)
+                                }
+                                crate::recents::Command::CloseAll(ids) => {
+                                    desktop_recents.retain(|entry| !ids.contains(&entry.app.id));
                                     Ok(None)
                                 }
                                 crate::recents::Command::Launch(_) => Ok(None),

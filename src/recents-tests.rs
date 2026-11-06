@@ -318,7 +318,7 @@ fn home_header_has_only_navigation_and_tv_settings() {
 }
 
 #[test]
-fn recents_has_only_cards_without_action_buttons_or_footer() {
+fn recents_has_only_cards_and_one_close_all_button_without_footer() {
     use crate::renderer::Draw;
     let mut state = ready();
     state.preferences.reduced_motion = true;
@@ -333,18 +333,48 @@ fn recents_has_only_cards_without_action_buttons_or_footer() {
     );
     assert!(scene.draw.iter().all(|draw| !matches!(draw,
         Draw::Text(value, ..) if value == "1 / 8" || value.contains("Close app") || value.contains("OK  Open"))));
-    assert!(
-        scene.draw.iter().all(|draw| !matches!(draw,
-        Draw::Text(value, ..) if value == "Netflix" || value == "YouTube" || value == "Close all"))
-    );
+    assert!(scene.draw.iter().all(|draw| !matches!(draw,
+        Draw::Text(value, ..) if value == "Netflix" || value == "YouTube")));
     assert!(
         scene
             .controls
             .iter()
-            .all(|control| matches!(control.target, Target::Recent(_)))
+            .all(|control| matches!(control.target, Target::Recent(_) | Target::RecentCloseAll))
     );
+    assert!(scene.draw.iter().any(|draw| matches!(draw,
+        Draw::Text(value, ..) if value == "Close all")));
     assert!(state.direction(Direction::Down, &scene.controls).is_empty());
+    assert_eq!(state.focus, Target::RecentCloseAll);
+    state.direction(Direction::Up, &scene.controls);
     assert_eq!(state.focus, Target::Recent("netflix".into()));
+}
+
+#[test]
+fn close_all_removes_each_listed_app_then_refreshes_and_rejects_a_single_request() {
+    let mut state = ready();
+    state.preferences.reduced_motion = true;
+    state.open_recents();
+    accept(&mut state, recents::demo());
+    let ids: Vec<String> = state
+        .recents
+        .entries
+        .iter()
+        .map(|entry| entry.app.id.clone())
+        .collect();
+    state.focus = Target::RecentCloseAll;
+    let generation = state.recents.generation + 1;
+    assert_eq!(
+        state.activate(),
+        vec![Effect::Recent {
+            generation,
+            command: Command::CloseAll(ids.clone())
+        }]
+    );
+    assert!(Command::CloseAll(ids.clone()).request().is_err());
+    let next = state.recent_response(generation, Command::CloseAll(ids), Ok(None));
+    assert_eq!(next.len(), 1);
+    assert!(state.recents.entries.is_empty());
+    assert_eq!(state.focus, Target::RecentEmpty);
 }
 
 #[test]
@@ -403,7 +433,7 @@ fn recents_is_modal_and_restores_the_exact_settings_parent() {
     state.direction(Direction::Right, &controls(&state));
     assert_eq!(state.focus, Target::Recent("youtube.leanback.v4".into()));
     state.direction(Direction::Down, &controls(&state));
-    assert_eq!(state.focus, Target::Recent("youtube.leanback.v4".into()));
+    assert_eq!(state.focus, Target::RecentCloseAll);
     assert!(state.back().is_empty());
     assert_eq!(state.focus, Target::ClockFormat);
     assert_eq!(state.subpage, Some(crate::state::Subpage::Clock));
@@ -520,7 +550,7 @@ fn recents_pointer_focus_never_moves_hit_regions_and_reduced_motion_snaps() {
     assert!(
         controls(&state)
             .iter()
-            .all(|c| matches!(c.target, Target::Recent(_)))
+            .all(|c| matches!(c.target, Target::Recent(_) | Target::RecentCloseAll))
     );
     state.recents.selected = 3;
     state.recents.position = 1.5;
@@ -537,7 +567,7 @@ fn recents_pointer_focus_never_moves_hit_regions_and_reduced_motion_snaps() {
     assert!(
         controls(&state)
             .iter()
-            .any(|c| matches!(c.target, Target::Recent(_)))
+            .any(|c| matches!(c.target, Target::Recent(_) | Target::RecentCloseAll))
     );
 }
 
@@ -564,7 +594,7 @@ fn recents_crossfade_reverses_without_jumping_and_restores_parent_input_immediat
         incoming
             .controls
             .iter()
-            .all(|c| matches!(c.target, Target::Recent(_)))
+            .all(|c| matches!(c.target, Target::Recent(_) | Target::RecentCloseAll))
     );
     state.back();
     assert!(!state.recents_open());
