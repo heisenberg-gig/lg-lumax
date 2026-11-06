@@ -2,18 +2,26 @@
 use super::*;
 use crate::recents::{Command, DismissalOutcome};
 
+/// One flat row: the focused card is largest and its neighbours step back without overlapping.
 fn card_rect(offset: f32) -> Rect {
     let depth = offset.abs();
-    let scale = 1. / (1. + 0.22 * depth);
-    let width = 900. * scale;
+    let scale = 1. - 0.2 * depth.min(1.);
+    let width = 640. * scale;
     let height = width * 9. / 16.;
-    let x = 960. + offset.signum() * (400. * depth.min(1.) + 160. * (depth - 1.).max(0.));
-    Rect::new(
-        x - width / 2.,
-        540. + 18. * depth.min(3.) - height / 2.,
-        width,
-        height,
-    )
+    let x = 960. + offset.signum() * (600. * depth.min(1.) + 520. * (depth - 1.).max(0.));
+    Rect::new(x - width / 2., 500. - height / 2., width, height)
+}
+
+fn ram_label(state: &State) -> Option<String> {
+    let info = state.system_info.as_ref()?;
+    let total = info.memory_total_kb?;
+    let free = info.memory_free_kb?;
+    let gb = |kb: u64| kb as f32 / 1_048_576.;
+    Some(format!(
+        "RAM  {:.1} / {:.1} GB",
+        gb(total.saturating_sub(free)),
+        gb(total)
+    ))
 }
 
 pub fn render(out: &mut Scene, state: &State, assets: &Assets) {
@@ -27,6 +35,19 @@ pub fn render(out: &mut Scene, state: &State, assets: &Assets) {
         c(0x252c3a, 0.38),
         c(0x0b0e15, 0.50),
     ));
+    if let Some(label) = ram_label(state) {
+        let style = text(20., 550, -0.01);
+        let width = assets.width(&label, style) + 48.;
+        let rect = Rect::new(960. - width / 2., 96., width, 48.);
+        out.pill(rect, false, false);
+        out.text(
+            &label,
+            Rect::new(rect.x, rect.y + 11., rect.w, 28.),
+            style,
+            c(0xffffff, 0.86),
+            true,
+        );
+    }
     if recent.entries.is_empty() && recent.dismissals.is_empty() {
         let message = if recent.error.is_some() {
             Some("recentError")
@@ -105,6 +126,8 @@ pub fn render(out: &mut Scene, state: &State, assets: &Assets) {
             let target = Target::Recent(entry.app.id.clone());
             let focused = *focus == target;
             let radius = 26. * rect.w / 900.;
+            // Small icon and name sit above each card and travel with it.
+            let icon_rect = Rect::new(rect.x, rect.y - 62., 80., 45.);
             let prominence = (1. - depth).clamp(0., 1.);
             out.shadow(rect, radius, 48., 22., 0.28 + 0.27 * prominence);
             let app = state
@@ -114,6 +137,14 @@ pub fn render(out: &mut Scene, state: &State, assets: &Assets) {
                 .find(|app| app.id == entry.app.id)
                 .unwrap_or(&entry.app);
             app_face(out, assets, app, rect, language, radius);
+            app_face(out, assets, app, icon_rect, language, 9.);
+            out.text(
+                &app.title,
+                Rect::new(rect.x + 96., rect.y - 58., (rect.w - 96.).max(0.), 38.),
+                text(23., 550, -0.02),
+                WHITE,
+                false,
+            );
             out.border(
                 rect,
                 radius,
@@ -135,6 +166,13 @@ pub fn render(out: &mut Scene, state: &State, assets: &Assets) {
     }
 
     if !recent.entries.is_empty() && recent.error.is_none() {
+        out.text(
+            language.t("recentCloseHint"),
+            Rect::new(360., 806., 1200., 30.),
+            text(19., 450, 0.),
+            c(0xffffff, 0.6),
+            true,
+        );
         let label = language.t("closeAll");
         let width = assets.width(label, text(21., 550, -0.01)) + 74.;
         button(

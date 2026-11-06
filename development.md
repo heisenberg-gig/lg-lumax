@@ -234,7 +234,9 @@ The platform worker uses the stock-Home operations captured on webOS 26:
 | Close one | `com.webos.service.recent/removeRecent`       | `{"appId":"APP_ID"}`                                                                               |
 | Launch    | `com.webos.service.applicationmanager/launch` | `{"id":"APP_ID","params":{},"reason":"recent","checkUpdateOnLaunch":true,"autoInstallation":true}` |
 
-"Close all" (the button under the cards, reached with Down) has no Luna endpoint of its own: it
+Recent apps is a flat carousel: the focused card is 640 px wide, neighbours step back to 80% without
+overlapping, and each card carries its icon and name above it. The RAM chip reuses the System
+section's `tv-system` read, which Luma also polls while the switcher is open. "Close all" (the button under the cards, reached with Down) has no Luna endpoint of its own: it
 sends `removeRecent` once per listed app and then reads the history again.
 
 Service-name capitalization is significant. These fixed calls go through the native process's

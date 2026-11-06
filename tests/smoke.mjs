@@ -85,8 +85,8 @@ try {
   assert.ok(!recents.ui_text.includes('Recent apps'));
   assert.ok(!recents.ui_text.includes('Pick up where you left off.'));
   assert.ok(!recents.ui_text.includes('Desktop preview · Sample history'));
-  assert.ok(!recents.ui_text.includes('Netflix'));
-  assert.ok(!recents.ui_text.includes('YouTube'));
+  assert.ok(recents.ui_text.includes('Netflix'));
+  assert.ok(recents.ui_text.includes('YouTube'));
   assert.ok(!recents.ui_text.includes('1 / 8'));
   assert.ok(recents.ui_text.includes('Close all'));
   assert.ok(
