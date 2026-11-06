@@ -17,6 +17,9 @@ pub struct TvStatus {
     pub hdr: Option<String>,
     pub game_mode: Option<bool>,
     pub freesync: Option<bool>,
+    /// The sound format playing, such as "Dolby Digital Plus", and its immersive layer.
+    pub audio: Option<String>,
+    pub audio_immersive: Option<String>,
 }
 
 impl TvStatus {
@@ -125,34 +128,92 @@ fn spell_value(raw: &str) -> String {
     if raw == "off" { raw.into() } else { spell(raw) }
 }
 
-/// Some keys (black level) are per input type: `{"hdmi":"low","ntsc":"auto"}`. Use the entry of
-/// the current input family, or the shared value when every entry agrees.
-fn per_input(value: &Value, input: Option<&str>) -> Value {
-    let Some(map) = value.as_object() else {
-        return value.clone();
-    };
-    let family = input.map(|i| i.trim_end_matches(|c: char| c.is_ascii_digit()));
-    if let Some(entry) = family.and_then(|f| map.get(f)) {
-        return entry.clone();
-    }
-    let mut values = map.values();
-    match values.next() {
-        Some(first) if values.all(|v| v == first) => first.clone(),
-        _ => Value::Null,
+/// `off`, `low`, `medium` and `high` stay lowercase so the view can translate them.
+fn level(value: &Value) -> Option<Reading> {
+    match text(value)? {
+        raw @ ("off" | "low" | "medium" | "high") => Some(Reading::Text(raw.into())),
+        other => Some(Reading::Text(spell(other))),
     }
 }
 
-const PICTURE: [(&str, &str); 10] = [
-    ("backlight", "tvOledLight"),
-    ("brightness", "tvBrightness"),
-    ("contrast", "tvContrast"),
-    ("color", "tvColor"),
-    ("sharpness", "tvSharpness"),
-    ("blackLevel", "tvBlackLevel"),
-    ("colorTemperature", "tvColorTemperature"),
-    ("gamma", "tvGamma"),
-    ("dynamicContrast", "tvDynamicContrast"),
-    ("energySaving", "tvEnergySaving"),
+/// LG's gamma keys: the 2.2 curve may carry a user level (`mediumHavingLevel`) and `high2` is
+/// BT.1886.
+fn gamma(value: &Value) -> Option<Reading> {
+    let name = match text(value)? {
+        "low" => "1.9",
+        "medium" | "mediumHavingLevel" => "2.2",
+        "high1" => "2.4",
+        "high2" => "BT.1886",
+        other => return Some(Reading::Text(spell(other))),
+    };
+    Some(Reading::Text(name.into()))
+}
+
+fn audio_codec(raw: &str) -> String {
+    match raw.to_lowercase().as_str() {
+        "pcm" | "lpcm" => "PCM".into(),
+        "aac" => "AAC".into(),
+        "heaac" => "HE-AAC".into(),
+        "ac3" => "Dolby Digital".into(),
+        "eac3" => "Dolby Digital Plus".into(),
+        "ac4" => "Dolby AC-4".into(),
+        "truehd" => "Dolby TrueHD".into(),
+        "dts" => "DTS".into(),
+        "dtshd" => "DTS-HD".into(),
+        "dtsx" => "DTS:X".into(),
+        "mpegh" => "MPEG-H".into(),
+        "mp3" => "MP3".into(),
+        "opus" => "Opus".into(),
+        "flac" => "FLAC".into(),
+        other => other.to_uppercase(),
+    }
+}
+
+fn audio_immersive(raw: &str) -> Option<String> {
+    let key: String = raw
+        .to_lowercase()
+        .chars()
+        .filter(|c| !matches!(c, '_' | ':' | '-' | ' '))
+        .collect();
+    match key.as_str() {
+        "" | "none" => None,
+        "atmos" | "dolbyatmos" => Some("Dolby Atmos".into()),
+        "dtsx" => Some("DTS:X".into()),
+        "mpegh" => Some("MPEG-H".into()),
+        _ => Some(raw.into()),
+    }
+}
+
+/// `getAudioInputProperty` answers `audioInputProperty: [{codec, immersive}]` while a sound plays.
+fn audio(reply: &Value) -> (Option<String>, Option<String>) {
+    let Some(property) = reply["audioInputProperty"]
+        .as_array()
+        .and_then(|list| list.first())
+    else {
+        return (None, None);
+    };
+    (
+        text(&property["codec"]).map(audio_codec),
+        text(&property["immersive"]).and_then(audio_immersive),
+    )
+}
+
+type Parse = fn(&Value) -> Option<Reading>;
+
+/// The Picture card in display order: the menu's own order first, then the extras.
+const PICTURE: [(&str, &str, Parse); 12] = [
+    ("backlight", "tvOledLight", reading),
+    ("contrast", "tvContrast", reading),
+    ("brightness", "tvBlackLevel", reading),
+    ("dynamicContrast", "tvDynamicContrast", level),
+    ("peakBrightness", "tvPeakBrightness", level),
+    ("gamma", "tvGamma", gamma),
+    ("sharpness", "tvSharpness", reading),
+    ("superResolution", "tvSuperResolution", level),
+    ("noiseReduction", "tvNoiseReduction", level),
+    ("color", "tvColor", reading),
+    ("colorTemperature", "tvColorTemperature", reading),
+    ("energySaving", "tvEnergySaving", reading),
 ];
 
 pub fn normalize(reply: &Value) -> Result<TvStatus, String> {
@@ -160,13 +221,12 @@ pub fn normalize(reply: &Value) -> Result<TvStatus, String> {
         return Err("Invalid TV status reply".into());
     }
     let settings = &reply["picture"]["settings"];
-    let input = text(&reply["picture"]["dimension"]["input"]);
     let mut picture = vec![];
     if let Some(mode) = text(&settings["pictureMode"]) {
         picture.push(("tvPictureMode", Reading::Text(picture_mode(mode))));
     }
-    for (key, label) in PICTURE {
-        if let Some(value) = reading(&per_input(&settings[key], input)) {
+    for (key, label, parse) in PICTURE {
+        if let Some(value) = parse(&settings[key]) {
             picture.push((label, value));
         }
     }
@@ -182,11 +242,14 @@ pub fn normalize(reply: &Value) -> Result<TvStatus, String> {
     let from_dimension = text(&reply["picture"]["dimension"]["dynamicRange"])
         .map(|range| range.trim_end_matches("ALLM"))
         .and_then(hdr_format);
+    let (audio, audio_immersive) = audio(&reply["audio"]);
     let status = TvStatus {
         picture,
         hdr: from_info.or(from_dimension),
         game_mode: info.and_then(|info| flag(&info["isGameMode"])),
         freesync: info.and_then(|info| flag(&info["freesyncEnabled"])),
+        audio,
+        audio_immersive,
     };
     if status.is_empty() {
         return Err("The TV returned no picture information".into());
@@ -201,19 +264,23 @@ pub fn demo() -> TvStatus {
         picture: vec![
             ("tvPictureMode", Text("Filmmaker Mode".into())),
             ("tvOledLight", Number(80)),
-            ("tvBrightness", Number(50)),
             ("tvContrast", Number(85)),
-            ("tvColor", Number(50)),
-            ("tvSharpness", Number(10)),
-            ("tvBlackLevel", Text("Auto".into())),
-            ("tvColorTemperature", Text("Warm 2".into())),
-            ("tvGamma", Text("Medium".into())),
+            ("tvBlackLevel", Number(50)),
             ("tvDynamicContrast", Text("off".into())),
+            ("tvPeakBrightness", Text("high".into())),
+            ("tvGamma", Text("2.2".into())),
+            ("tvSharpness", Number(10)),
+            ("tvSuperResolution", Text("low".into())),
+            ("tvNoiseReduction", Text("off".into())),
+            ("tvColor", Number(50)),
+            ("tvColorTemperature", Text("Warm 2".into())),
             ("tvEnergySaving", Text("off".into())),
         ],
         hdr: Some("Dolby Vision".into()),
         game_mode: Some(false),
         freesync: Some(false),
+        audio: Some("Dolby Digital Plus".into()),
+        audio_immersive: Some("Dolby Atmos".into()),
     }
 }
 

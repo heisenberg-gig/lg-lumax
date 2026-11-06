@@ -973,7 +973,12 @@ fn tv_status_reads_the_whole_picture_category_and_keeps_going_when_one_source_fa
         Ok(json!({"returnValue":true,"settings":{"pictureMode":"cinema","backlight":"80"}})),
     );
     f.reply("getStatus", Err("videooutput unavailable".into()));
+    f.reply(
+        "getAudioInputProperty",
+        Ok(json!({"audioInputProperty":[{"codec":"eac3","immersive":"atmos"}]})),
+    );
     let reply = status::collect(&f).unwrap();
+    assert_eq!(reply["audio"]["audioInputProperty"][0]["codec"], "eac3");
     assert_eq!(reply["returnValue"], true);
     assert_eq!(reply["picture"]["settings"]["pictureMode"], "cinema");
     assert!(reply["video"].is_null());
@@ -987,11 +992,11 @@ fn tv_status_reads_the_whole_picture_category_and_keeps_going_when_one_source_fa
 #[test]
 fn tv_status_tolerates_refused_services_and_requires_root() {
     let f = Fixture::new();
-    for method in ["getSystemSettings", "getStatus"] {
+    for method in ["getSystemSettings", "getStatus", "getAudioInputProperty"] {
         f.reply(method, Ok(json!({"returnValue":false})));
     }
     let reply = status::collect(&f).unwrap();
-    assert!(reply["picture"].is_null() && reply["video"].is_null());
+    assert!(reply["picture"].is_null() && reply["video"].is_null() && reply["audio"].is_null());
     f.uid.set(1000);
     assert!(status::collect(&f).is_err());
 }
