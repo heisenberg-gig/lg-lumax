@@ -234,6 +234,9 @@ The platform worker uses the stock-Home operations captured on webOS 26:
 | Close one | `com.webos.service.recent/removeRecent`       | `{"appId":"APP_ID"}`                                                                               |
 | Launch    | `com.webos.service.applicationmanager/launch` | `{"id":"APP_ID","params":{},"reason":"recent","checkUpdateOnLaunch":true,"autoInstallation":true}` |
 
+"Close all" (the button under the cards, reached with Down) has no Luna endpoint of its own: it
+sends `removeRecent` once per listed app and then reads the history again.
+
 Service-name capitalization is significant. These fixed calls go through the native process's
 authenticated Homebrew Channel `exec` connection, using bounded root `luna-send` commands and no
 application impersonation. Mutations are sent once, checked for `returnValue: true`, then history

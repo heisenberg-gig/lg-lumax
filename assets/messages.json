@@ -975,22 +975,6 @@
     "nl": "Systeem",
     "sv": "System"
   },
-  "favorites": {
-    "zh-tw": "我的最愛",
-    "en": "Favorites",
-    "de": "Favoriten",
-    "es": "Favoritos",
-    "zh": "收藏",
-    "pt": "Favoritos",
-    "pt-pt": "Favoritos",
-    "it": "Preferiti",
-    "ru": "Избранное",
-    "pl": "Ulubione",
-    "fr": "Favoris",
-    "vi": "Mục ưa thích",
-    "nl": "Favorieten",
-    "sv": "Favoriter"
-  },
   "weather": {
     "zh-tw": "天氣",
     "en": "Weather",
@@ -2078,6 +2062,22 @@
     "vi": "Làm mới đầu vào",
     "nl": "Ingangen vernieuwen",
     "sv": "Uppdatera ingångar"
+  },
+  "closeAll": {
+    "zh-tw": "全部關閉",
+    "en": "Close all",
+    "de": "Alle schließen",
+    "es": "Cerrar todas",
+    "zh": "全部关闭",
+    "pt": "Fechar todos",
+    "pt-pt": "Fechar todas",
+    "it": "Chiudi tutte",
+    "ru": "Закрыть все",
+    "pl": "Zamknij wszystkie",
+    "fr": "Tout fermer",
+    "vi": "Đóng tất cả",
+    "nl": "Alles sluiten",
+    "sv": "Stäng alla"
   },
   "retry": {
     "zh-tw": "重試",

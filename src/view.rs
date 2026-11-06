@@ -1144,13 +1144,6 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
             top + date_height + greeting_height,
         );
     }
-    out.text(
-        language.t("favorites"),
-        Rect::new(84., 478.5 - s, 1000., 31.),
-        text(23.2, 550, -0.035).leading(1.3),
-        WHITE,
-        false,
-    );
     if state.moving.is_some() {
         out.text(
             language.t("moveApps"),

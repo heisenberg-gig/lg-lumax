@@ -17,10 +17,12 @@ pub enum Command {
     List,
     Launch(String),
     Close(String),
+    /// Stock Home has no kill-all: this is one `removeRecent` per listed app.
+    CloseAll(Vec<String>),
 }
 
 impl Command {
-    /// Exact operations observed from stock Home. Never synthesize a kill-all.
+    /// Exact operations observed from stock Home. A close-all is only ever a loop of those.
     pub fn request(&self) -> Result<(&'static str, Value), String> {
         if let Self::Launch(id) | Self::Close(id) = self
             && (!valid_app_id(id) || excluded(id) || crate::scroll_preview::is_placeholder(id))
@@ -28,6 +30,9 @@ impl Command {
             return Err("Invalid recent application identifier".into());
         }
         Ok(match self {
+            Self::CloseAll(_) => {
+                return Err("Close all runs one removal per app".into());
+            }
             Self::List => ("luna://com.webos.service.recent/listRecents", json!({})),
             Self::Close(id) => (
                 "luna://com.webos.service.recent/removeRecent",
@@ -390,6 +395,13 @@ impl State {
                 Command::Launch(_) => {
                     return self.back();
                 }
+                Command::CloseAll(ids) => {
+                    self.recents.entries.retain(|e| !ids.contains(&e.app.id));
+                    self.recents.sync_slots();
+                    self.recents.selected = 0;
+                    self.focus = Target::RecentEmpty;
+                    return self.recent_request(Command::List);
+                }
                 Command::Close(id) => {
                     let removed = self
                         .recents
@@ -427,6 +439,19 @@ impl State {
         vec![]
     }
 
+    pub fn recent_close_all(&mut self) -> Vec<Effect> {
+        let ids: Vec<String> = self
+            .recents
+            .entries
+            .iter()
+            .map(|entry| entry.app.id.clone())
+            .collect();
+        if ids.is_empty() {
+            return vec![];
+        }
+        self.recent_request(Command::CloseAll(ids))
+    }
+
     pub fn recent_direction(&mut self, direction: Direction) -> Vec<Effect> {
         if matches!(direction, Direction::Up)
             && let Target::Recent(id) = &self.focus
@@ -448,6 +473,7 @@ impl State {
             let id = entries[next].app.id.clone();
             self.focus = match direction {
                 Direction::Down if self.recents.error.is_some() => Target::RecentRetry,
+                Direction::Down => Target::RecentCloseAll,
                 _ => Target::Recent(id),
             };
         } else {
@@ -460,6 +486,10 @@ impl State {
                     } else {
                         Target::RecentEmpty
                     }),
+                (Target::RecentCloseAll, Direction::Up) => entries
+                    .get(self.recents.selected)
+                    .map(|e| Target::Recent(e.app.id.clone()))
+                    .unwrap_or(Target::RecentEmpty),
                 (_, Direction::Left) if self.recents.error.is_some() => Target::RecentRetry,
                 _ => self.focus.clone(),
             };

@@ -88,7 +88,7 @@ try {
   assert.ok(!recents.ui_text.includes('Netflix'));
   assert.ok(!recents.ui_text.includes('YouTube'));
   assert.ok(!recents.ui_text.includes('1 / 8'));
-  assert.ok(!recents.ui_text.includes('Close all'));
+  assert.ok(recents.ui_text.includes('Close all'));
   assert.ok(
     !recents.ui_text.some((value) => value.includes('Switch') && value.includes('Close app')),
   );
