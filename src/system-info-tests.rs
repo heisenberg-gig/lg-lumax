@@ -26,6 +26,7 @@ fn full() -> Value {
         "wireless": "Inter-| sta\n face | tus | link level\n wlan0: 0000   62.  -48.  -256 0 0\n",
         "mac": {"wlan0": "AA:BB:CC:DD:EE:FF\n", "eth0": null},
         "remote": {"returnValue": true, "batteryLevel": 80},
+        "power": {"returnValue": true, "time": {"uptime": "90000", "ontime": "8040"}},
     })
 }
 
@@ -51,6 +52,7 @@ fn normalizes_a_complete_reply() {
     assert_eq!(info.ram.as_deref(), Some("3GB"));
     assert_eq!(info.panel_refresh_hz, Some(120));
     assert_eq!(info.remote_battery, Some(80));
+    assert_eq!(info.session_secs, Some(8040));
     let net = &info.network;
     assert_eq!(net.link, Some(Link::Wifi));
     assert_eq!(net.connected, Some(true));
@@ -115,6 +117,32 @@ fn remote_battery_prefers_the_service_then_the_pairing_file() {
     reply["remote"] = json!({"batteryLevel": "73"});
     assert_eq!(remote_battery(&reply), Some(73));
     assert_eq!(remote_battery(&Value::Null), None);
+}
+
+#[test]
+fn remote_battery_uses_the_saved_level_when_the_remote_is_asleep() {
+    let mut reply = full();
+    reply["remote"] = json!({"returnValue": true});
+    reply["remote_saved"] = json!("{\"level\": 64, \"mac\": \"x\"}");
+    reply["remote_pairing"] = json!("battery=20 (low)\n");
+    assert_eq!(remote_battery(&reply), Some(64));
+    reply["remote_saved"] = json!("{\"level\": 400}");
+    assert_eq!(remote_battery(&reply), None);
+    reply["remote_saved"] = json!("not json");
+    assert_eq!(remote_battery(&reply), None);
+}
+
+#[test]
+fn session_time_reads_ontime_and_formats_compactly() {
+    let mut reply = full();
+    reply["power"] = json!({"time": {"ontime": 0}});
+    assert_eq!(normalize(&reply).unwrap().session_secs, Some(0));
+    reply["power"] = json!(null);
+    assert_eq!(normalize(&reply).unwrap().session_secs, None);
+    assert_eq!(duration(45), "45s");
+    assert_eq!(duration(840), "14m");
+    assert_eq!(duration(8040), "2h 14m");
+    assert_eq!(duration(3600), "1h 00m");
 }
 
 #[test]

@@ -2629,6 +2629,10 @@ fn system_settings(out: &mut Scene, state: &State) {
             "sysTemperature",
             info.temperature_c.map(|v| format!("{v} °C")),
         ),
+        (
+            "sysSession",
+            info.session_secs.map(crate::system_info::duration),
+        ),
         ("sysCpuLoad", info.cpu_load.map(|v| format!("{v} %"))),
         ("sysCpuFrequency", info.cpu_mhz.map(|v| format!("{v} MHz"))),
         ("sysGpuClock", info.gpu_mhz.map(|v| format!("{v} MHz"))),
@@ -2741,18 +2745,18 @@ fn system_settings(out: &mut Scene, state: &State) {
     let top = 164.8 - s;
     let (left, right) = ((640., 548.), (1212., 548.));
     let mut y = top;
-    if !load.is_empty() {
-        y = reading_card(out, language.t("sysLoad"), &load, left, y);
+    if !tv.is_empty() {
+        y = reading_card(out, language.t("sysThisTv"), &tv, left, y);
     }
-    if !network.is_empty() {
-        reading_card(out, language.t("netHeading"), &network, left, y);
+    if !load.is_empty() {
+        reading_card(out, language.t("sysLoad"), &load, left, y);
     }
     let mut y = top;
     if !memory.is_empty() {
         y = reading_card(out, language.t("sysMemoryStorage"), &memory, right, y);
     }
-    if !tv.is_empty() {
-        reading_card(out, language.t("sysThisTv"), &tv, right, y);
+    if !network.is_empty() {
+        reading_card(out, language.t("netHeading"), &network, right, y);
     }
 }
 
