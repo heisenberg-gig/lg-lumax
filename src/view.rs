@@ -2748,15 +2748,15 @@ fn system_settings(out: &mut Scene, state: &State) {
     if !tv.is_empty() {
         y = reading_card(out, language.t("sysThisTv"), &tv, left, y);
     }
-    if !load.is_empty() {
-        reading_card(out, language.t("sysLoad"), &load, left, y);
+    if !network.is_empty() {
+        reading_card(out, language.t("netHeading"), &network, left, y);
     }
     let mut y = top;
-    if !memory.is_empty() {
-        y = reading_card(out, language.t("sysMemoryStorage"), &memory, right, y);
+    if !load.is_empty() {
+        y = reading_card(out, language.t("sysLoad"), &load, right, y);
     }
-    if !network.is_empty() {
-        reading_card(out, language.t("netHeading"), &network, right, y);
+    if !memory.is_empty() {
+        reading_card(out, language.t("sysMemoryStorage"), &memory, right, y);
     }
 }
 

@@ -24,7 +24,8 @@ fn file(system: &impl System, path: &str, limit: usize) -> Value {
 fn service(system: &impl System, name: &str, method: &str, payload: Value) -> Value {
     system::luna(system, name, method, &payload)
         .ok()
-        .filter(|reply| reply["returnValue"] == true)
+        // tvpower omits `returnValue` on success; only an explicit `false` is a failure.
+        .filter(|reply| reply["returnValue"] != false)
         .unwrap_or(Value::Null)
 }
 

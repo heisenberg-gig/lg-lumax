@@ -1021,7 +1021,7 @@ fn tv_system_reads_files_storage_and_services_and_tolerates_gaps() {
     f.put("/var/lib/tvweb/remote-battery.json", b"{\"level\":64}");
     f.reply(
         "getPowerOnTime",
-        Ok(json!({"returnValue":true,"time":{"uptime":"900","ontime":"120"}})),
+        Ok(json!({"time":{"uptime":"900","ontime":"120"}})),
     );
     let reply = metrics::collect(&f).unwrap();
     assert_eq!(reply["remote_saved"], "{\"level\":64}");
