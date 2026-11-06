@@ -2744,19 +2744,22 @@ fn system_settings(out: &mut Scene, state: &State) {
     // Two columns keep every reading on one 1080p screen.
     let top = 164.8 - s;
     let (left, right) = ((640., 548.), (1212., 548.));
-    let mut y = top;
+    // Both rows start at the same height in each column, so the titles line up even when the
+    // card above one of them is shorter.
+    let mut left_y = top;
+    if !load.is_empty() {
+        left_y = reading_card(out, language.t("sysLoad"), &load, left, top);
+    }
+    let mut right_y = top;
     if !tv.is_empty() {
-        y = reading_card(out, language.t("sysThisTv"), &tv, left, y);
+        right_y = reading_card(out, language.t("sysThisTv"), &tv, right, top);
+    }
+    let second = left_y.max(right_y);
+    if !memory.is_empty() {
+        reading_card(out, language.t("sysMemoryStorage"), &memory, left, second);
     }
     if !network.is_empty() {
-        reading_card(out, language.t("netHeading"), &network, left, y);
-    }
-    let mut y = top;
-    if !load.is_empty() {
-        y = reading_card(out, language.t("sysLoad"), &load, right, y);
-    }
-    if !memory.is_empty() {
-        reading_card(out, language.t("sysMemoryStorage"), &memory, right, y);
+        reading_card(out, language.t("netHeading"), &network, right, second);
     }
 }
 
