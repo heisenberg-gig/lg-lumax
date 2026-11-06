@@ -1018,7 +1018,14 @@ fn tv_system_reads_files_storage_and_services_and_tolerates_gaps() {
     f.put("/sys/class/net/wlan0/address", b"aa:bb:cc:dd:ee:ff\n");
     f.put("/proc/net/dev", b"wlan0: 1 2 3 4 5 6 7 8 9\n");
     f.put("/mnt/lg/cmn_data/btsvc/mrcu1.info", b"battery=55\n");
+    f.put("/var/lib/tvweb/remote-battery.json", b"{\"level\":64}");
+    f.reply(
+        "getPowerOnTime",
+        Ok(json!({"returnValue":true,"time":{"uptime":"900","ontime":"120"}})),
+    );
     let reply = metrics::collect(&f).unwrap();
+    assert_eq!(reply["remote_saved"], "{\"level\":64}");
+    assert_eq!(reply["power"]["time"]["ontime"], "120");
     assert_eq!(reply["emmc_life_time"], "0x01 0x01\n");
     assert_eq!(reply["mac"]["wlan0"], "aa:bb:cc:dd:ee:ff\n");
     assert!(reply["mac"]["eth0"].is_null());
@@ -1045,7 +1052,9 @@ fn tv_system_falls_back_to_the_thermal_zone_and_requires_root() {
     f.reply("getSystemProperties", Ok(json!({"returnValue":false})));
     f.reply("getStatus", Ok(json!({"returnValue":false})));
     f.reply("getDeviceInfo", Ok(json!({"returnValue":false})));
+    f.reply("getPowerOnTime", Err("no such method".into()));
     let reply = metrics::collect(&f).unwrap();
+    assert!(reply["power"].is_null() && reply["remote_saved"].is_null());
     assert_eq!(reply["temperature"]["lg"], false);
     assert_eq!(reply["temperature"]["value"], "51000\n");
     assert!(reply["storage"].is_null() && reply["properties"].is_null());

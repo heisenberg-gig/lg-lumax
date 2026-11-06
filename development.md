@@ -1071,14 +1071,22 @@ file. A missing source becomes `null`. Kernel files are read with `read_virtual`
 bytes read: `/sys` files advertise a whole page as their size and would fail the size check used
 for regular files.
 
-`src/system_info.rs` parses them (tested in `src/system-info-tests.rs`) into four cards: Load
-(temperature, CPU load, CPU and GPU clocks, per-core load), Network (link, internet, network name,
-IP, mask, gateway, DNS, signal, interface and MAC, traffic), Memory and storage (free memory, swap,
-app storage, eMMC health) and This TV (model, firmware, webOS, SoC, RAM, panel refresh, remote
-battery). Readings the TV does not report are not shown. The remote battery is the level the TV
-reports (`batteryLevel`, then the pairing file's `battery=` line unless it is a threshold such as
-`20 (low)`); native-tv also reads the level live over Bluetooth GATT on webOS 9 and 10, which is
-not included. Per-process metrics are not included either.
+`src/system_info.rs` parses them (tested in `src/system-info-tests.rs`) into four cards, two per
+column with the titles aligned: left TV Info (model, firmware, webOS, SoC, RAM, panel refresh,
+remote battery) and CPU (temperature, session timer, CPU load, CPU and GPU clocks, per-core load);
+right Memory and storage (free memory, swap, app storage, eMMC health) and Network (link, internet,
+network name, IP, mask, gateway, DNS, signal, interface and MAC, traffic). Readings the TV does not
+report are not shown.
+
+The session timer is `tvpower/power/getPowerOnTime`'s `time.ontime`: seconds since the TV last
+powered on (0 in standby), so it restarts on every kind of start. The helper reads it, so it does
+not depend on Luma running during standby; it is shown as `2h 14m`.
+
+The remote battery is the level the TV reports (`batteryLevel`), then the last level native-tv
+saved in `/var/lib/tvweb/remote-battery.json` when it is installed (the remote only reports a level
+while awake), then the pairing file's `battery=` line unless it is a threshold such as `20 (low)`.
+native-tv also reads the level live over Bluetooth GATT on webOS 9 and 10, which is not included.
+Per-process metrics are not included either.
 
 ### Settings → Picture (read-only status)
 

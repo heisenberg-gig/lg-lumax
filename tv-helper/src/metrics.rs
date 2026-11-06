@@ -9,6 +9,9 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 const APP_STORAGE: &str = "/mnt/lg/appstore";
+/// native-tv keeps the last battery level its Bluetooth read got; the remote only reports a level
+/// while it is awake, so this file is the best source when it is installed.
+const NATIVE_TV_BATTERY: &str = "/var/lib/tvweb/remote-battery.json";
 
 /// Kernel files (/proc, /sys) are read by bytes: their advertised size is 0 or a whole page.
 fn file(system: &impl System, path: &str, limit: usize) -> Value {
@@ -95,5 +98,8 @@ pub fn collect(system: &impl System) -> Result<Value> {
             json!({"subscribe": false, "deviceName": "MagicRemote_1"}),
         ),
         "remote_pairing": pairing(system),
+        "remote_saved": file(system, NATIVE_TV_BATTERY, 4 * 1024),
+        // `time.ontime` counts seconds since the TV last powered on (0 in standby).
+        "power": service(system, "com.webos.service.tvpower", "power/getPowerOnTime", json!({})),
     }))
 }

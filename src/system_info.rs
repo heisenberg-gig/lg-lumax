@@ -25,6 +25,8 @@ pub struct SystemInfo {
     pub ram: Option<String>,
     pub panel_refresh_hz: Option<u32>,
     pub remote_battery: Option<u32>,
+    /// Seconds since the TV last powered on (any start: cold boot, standby, remote, Wake-on-WiFi).
+    pub session_secs: Option<u64>,
     pub network: Network,
 }
 
@@ -345,21 +347,44 @@ fn remote_battery(reply: &Value) -> Option<u32> {
             .filter(|level| *level <= 100)
             .map(|level| level as u32)
     };
-    level(&reply["remote"]["batteryLevel"]).or_else(|| {
-        // The pairing file's `battery=` line; newer webOS writes a threshold such as `20 (low)`.
-        text(&reply["remote_pairing"])?.lines().find_map(|line| {
-            let (key, value) = line.split_once('=')?;
-            if !key.trim().eq_ignore_ascii_case("battery") {
-                return None;
-            }
-            let value = value.trim();
-            let digits: String = value.chars().take_while(char::is_ascii_digit).collect();
-            let rest = value[digits.len()..].trim_start();
-            (!digits.is_empty() && !rest.starts_with('('))
-                .then(|| level(&Value::String(digits)))
-                .flatten()
+    level(&reply["remote"]["batteryLevel"])
+        .or_else(|| {
+            // native-tv's saved last level, when it is installed.
+            let saved: Value = serde_json::from_str(text(&reply["remote_saved"])?).ok()?;
+            level(&saved["level"])
         })
-    })
+        .or_else(|| {
+            // The pairing file's `battery=` line; newer webOS writes a threshold such as `20 (low)`.
+            text(&reply["remote_pairing"])?.lines().find_map(|line| {
+                let (key, value) = line.split_once('=')?;
+                if !key.trim().eq_ignore_ascii_case("battery") {
+                    return None;
+                }
+                let value = value.trim();
+                let digits: String = value.chars().take_while(char::is_ascii_digit).collect();
+                let rest = value[digits.len()..].trim_start();
+                (!digits.is_empty() && !rest.starts_with('('))
+                    .then(|| level(&Value::String(digits)))
+                    .flatten()
+            })
+        })
+}
+
+/// `power/getPowerOnTime` answers `time.ontime` as a string of seconds.
+fn session_secs(reply: &Value) -> Option<u64> {
+    let time = &reply["power"]["time"];
+    time["ontime"]
+        .as_u64()
+        .or_else(|| text(&time["ontime"]).and_then(unsigned))
+}
+
+/// "2h 14m", "14m", "45s": the session timer's compact form.
+pub fn duration(seconds: u64) -> String {
+    match (seconds / 3600, seconds / 60 % 60) {
+        (0, 0) => format!("{seconds}s"),
+        (0, minutes) => format!("{minutes}m"),
+        (hours, minutes) => format!("{hours}h {minutes:02}m"),
+    }
 }
 
 pub fn normalize(reply: &Value) -> Result<SystemInfo, String> {
@@ -407,6 +432,7 @@ pub fn normalize(reply: &Value) -> Result<SystemInfo, String> {
             .filter(|hz| (1..=1000).contains(hz))
             .map(|hz| hz as u32),
         remote_battery: remote_battery(reply),
+        session_secs: session_secs(reply),
         network: network(reply),
     };
     if info.is_empty() {
@@ -448,6 +474,7 @@ pub fn demo() -> SystemInfo {
         ram: Some("3GB".into()),
         panel_refresh_hz: Some(120),
         remote_battery: Some(80),
+        session_secs: Some(8_040),
         network: Network {
             link: Some(Link::Wifi),
             connected: Some(true),
