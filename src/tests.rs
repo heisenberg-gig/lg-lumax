@@ -2298,15 +2298,15 @@ fn widgets_group_existing_settings_and_restore_each_parent_without_changing_pref
     }]);
     let saved = serde_json::to_value(&state.preferences).unwrap();
     state.open(2);
-    assert_eq!(SECTION_COUNT, 5);
+    assert_eq!(SECTION_COUNT, 6);
     assert!(
         !controls(&state)
             .iter()
             .any(|control| control.target == Target::Setting(6))
     );
-    state.direction(Direction::Down, &controls(&state));
-    state.direction(Direction::Down, &controls(&state));
-    state.direction(Direction::Down, &controls(&state));
+    for _ in 0..=WIDGETS_SECTION {
+        state.direction(Direction::Down, &controls(&state));
+    }
     assert_eq!(state.focus, Target::Sidebar(WIDGETS_SECTION));
     state.direction(Direction::Right, &controls(&state));
     assert_eq!(state.focus, Target::Widget(4));
@@ -2392,7 +2392,7 @@ fn widgets_are_localized_without_legacy_sidebar_entries() {
                 .iter()
                 .filter(|c| matches!(c.target, Target::Sidebar(_)))
                 .count(),
-            5
+            crate::state::SECTION_COUNT
         );
         assert_eq!(
             page.controls

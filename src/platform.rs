@@ -177,6 +177,7 @@ pub enum Request {
     RefreshInputs,
     TvStatus,
     SystemInfo,
+    OledCare,
     Launch(String),
     Uninstall(String),
     SyncSplash(String),
@@ -191,6 +192,7 @@ pub enum Response {
     TvStatus(Result<crate::tv_status::TvStatus, String>),
     /// Boxed: the readings are much larger than the other replies.
     SystemInfo(Result<Box<crate::system_info::SystemInfo>, String>),
+    OledCare(Result<Box<crate::oled_care::OledCare>, String>),
     Launched(Result<(), String>),
     Uninstalled {
         id: String,
@@ -273,6 +275,14 @@ impl Platform {
                             system_info_call()
                         } else {
                             Ok(crate::system_info::demo())
+                        }
+                        .map(Box::new),
+                    ),
+                    Request::OledCare => Response::OledCare(
+                        if webos {
+                            oled_care_call()
+                        } else {
+                            Ok(crate::oled_care::demo())
                         }
                         .map(Box::new),
                     ),
@@ -404,6 +414,11 @@ fn tv_status_call() -> Result<crate::tv_status::TvStatus, String> {
 /// Same boundary as the picture status: one bounded, read-only helper run.
 fn system_info_call() -> Result<crate::system_info::SystemInfo, String> {
     crate::system_info::normalize(&read_only_helper("tv-system")?)
+}
+
+/// Same boundary again: one bounded, read-only helper run.
+fn oled_care_call() -> Result<crate::oled_care::OledCare, String> {
+    crate::oled_care::normalize(&read_only_helper("tv-oled")?)
 }
 
 fn read_only_helper(operation: &str) -> Result<Value, String> {

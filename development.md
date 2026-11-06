@@ -1088,6 +1088,35 @@ while awake), then the pairing file's `battery=` line unless it is a threshold s
 native-tv also reads the level live over Bluetooth GATT on webOS 9 and 10, which is not included.
 Per-process metrics are not included either.
 
+### Settings → OLED Care (read-only panel care)
+
+The sidebar order is General, Background, Picture, OLED Care, Widgets, System (`PICTURE_SECTION`,
+`OLED_SECTION`, `WIDGETS_SECTION`, `SYSTEM_SECTION` in `src/state.rs`).
+
+The OLED Care section only reads. Luma runs `luma-helper tv-oled` through Homebrew Channel's root
+`exec` service. The helper returns the raw replies of `com.webos.service.panelcontroller/
+getPanelUsageTime`, `com.webos.service.oledepl/getGlobalStressReduction` and `getTemporalPeakControl`,
+the picture settings category and a handful of text records from `/mnt/lg/cmn_data/pnwash/`; a source
+that fails becomes `null`. `src/oled_care.rs` does the arithmetic (tested in
+`src/oled-care-tests.rs`), following native-tv's OLED care tab:
+
+- `panelUsageTime` counts ten-minute units, so panel hours are the value divided by 6. Without it the
+  last compensation record (`autoOffRsLastTime` or `autoOffRsTime`, whole hours) times 6 stands in.
+- Time to maintenance is the compensation interval (`autoOffRsIntervalHomeMode` in ten-minute units,
+  else `autoOffRsInterval` in hours, 4 h by default, 0.5-24 h) minus the hours since the last
+  compensation.
+- Hours to the next Pixel Refresher are `autoJbInterval` (2000 h by default) minus the panel hours
+  since `autoPnwashTime` or `autoJbLastTime`.
+- Cycle and failure counts come from `completedOffRsCount`, `completedJbCount` and `failAlertCount`.
+- ASBL is the temporal peak control and GSR the global stress reduction; the GSR stress events are
+  the live `stressCount`, or the `gsrStressCount` record.
+- Screen shift, logo dimming (`logoLuminanceAdjust`, where `weak`, `middle` and `strong` read as low,
+  medium and high) and scheduled pixel refresh come from the picture settings.
+
+`com.webos.service.tv.systemproperty/getSystemProperties` refuses the panel keys on an LG 55C5 and
+`com.webos.service.tv.display` does not exist there, so neither is used. Nothing here writes to the
+TV; ASBL and GSR are only shown.
+
 ### Settings → Picture (read-only status)
 
 The Picture section only reads. Luma asks Homebrew Channel's root `exec` service to run
