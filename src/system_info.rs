@@ -340,10 +340,9 @@ impl Network {
 }
 
 fn remote_battery(reply: &Value) -> Option<u32> {
+    // The TV writes `63.0` in its saved file and `HIGH` instead of a number while the remote sleeps.
     let level = |value: &Value| {
-        value
-            .as_u64()
-            .or_else(|| text(value).and_then(unsigned))
+        whole_number(value)
             .filter(|level| *level <= 100)
             .map(|level| level as u32)
     };
@@ -372,10 +371,15 @@ fn remote_battery(reply: &Value) -> Option<u32> {
 
 /// `power/getPowerOnTime` answers `time.ontime` as a string of seconds.
 fn session_secs(reply: &Value) -> Option<u64> {
-    let time = &reply["power"]["time"];
-    time["ontime"]
-        .as_u64()
-        .or_else(|| text(&time["ontime"]).and_then(unsigned))
+    whole_number(&reply["power"]["time"]["ontime"])
+}
+
+/// A number the TV may write as `5`, `"5"`, `5.0` or `"377.08"`; fractions round down.
+fn whole_number(value: &Value) -> Option<u64> {
+    let number = value
+        .as_f64()
+        .or_else(|| text(value).and_then(|token| token.parse().ok()))?;
+    (number.is_finite() && number >= 0.).then_some(number as u64)
 }
 
 /// "2h 14m", "14m", "45s": the session timer's compact form.

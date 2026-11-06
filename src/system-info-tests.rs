@@ -126,6 +126,13 @@ fn remote_battery_uses_the_saved_level_when_the_remote_is_asleep() {
     reply["remote_saved"] = json!("{\"level\": 64, \"mac\": \"x\"}");
     reply["remote_pairing"] = json!("battery=20 (low)\n");
     assert_eq!(remote_battery(&reply), Some(64));
+    reply["remote"] = json!({"returnValue": true, "batteryLevel": "HIGH"});
+    reply["remote_saved"] = json!("{\"level\":63.0,\"connected\":true}");
+    assert_eq!(
+        remote_battery(&reply),
+        Some(63),
+        "float level and a word level"
+    );
     reply["remote_saved"] = json!("{\"level\": 400}");
     assert_eq!(remote_battery(&reply), None);
     reply["remote_saved"] = json!("not json");
@@ -139,6 +146,8 @@ fn session_time_reads_ontime_and_formats_compactly() {
     assert_eq!(normalize(&reply).unwrap().session_secs, Some(0));
     reply["power"] = json!(null);
     assert_eq!(normalize(&reply).unwrap().session_secs, None);
+    reply["power"] = json!({"time": {"uptime": "4313.13", "ontime": "377.08"}});
+    assert_eq!(normalize(&reply).unwrap().session_secs, Some(377));
     assert_eq!(duration(45), "45s");
     assert_eq!(duration(840), "14m");
     assert_eq!(duration(8040), "2h 14m");
