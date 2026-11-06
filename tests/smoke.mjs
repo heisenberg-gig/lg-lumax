@@ -372,10 +372,7 @@ try {
   assert.deepEqual(oled.focus, { Sidebar: 3 });
   for (const label of ['Panel hours', 'Maintenance in', 'Screen shift', 'ASBL', 'GSR events'])
     assert.ok(oled.ui_text.includes(label), `OLED Care section shows ${label}`);
-  const system = await scenario(
-    'system-settings',
-    'settings,down,down,down,down,down,down,right',
-  );
+  const system = await scenario('system-settings', 'settings,down,down,down,down,down,down,right');
   assert.deepEqual(system.focus, { Sidebar: 5 });
   assert.ok(!system.ui_text.includes('Luma update'));
   assert.ok(!system.ui_text.includes('Quit app'));
