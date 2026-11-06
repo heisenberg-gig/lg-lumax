@@ -1092,12 +1092,19 @@ Per-process metrics are not included either.
 
 The Picture section only reads. Luma asks Homebrew Channel's root `exec` service to run
 `luma-helper tv-status`, which returns the raw replies of `com.webos.service.settings`
-(`getSystemSettings`, whole picture category) and `com.webos.service.videooutput/getStatus`.
-A source that fails becomes `null`, so one missing service never hides the other.
-`src/tv_status.rs` normalises the replies (pure parsing, tested in `src/tv-status-tests.rs`):
-picture mode, OLED light, brightness, contrast, colour, sharpness, black level, colour
-temperature, gamma, dynamic contrast and energy saving, plus the signal's HDR format, game mode and
-FreeSync. Settings the TV does not report are not shown. The section reads when it opens and every
+(`getSystemSettings`, whole picture category), `com.webos.service.videooutput/getStatus` and
+`com.webos.service.audio/tv/getAudioInputProperty` (codec and immersive layer of the sound playing).
+A source that fails becomes `null`, so one missing service never hides the others.
+`src/tv_status.rs` normalises the replies (pure parsing, tested in `src/tv-status-tests.rs`) in the
+TV menu's order: picture mode, OLED pixel brightness (`backlight`), contrast, black level (the
+0-100 `brightness` key; `blackLevel` is a per-input auto/low/high setting and is not shown),
+dynamic contrast, peak brightness, gamma, sharpness, super resolution and noise reduction, then
+colour, colour temperature and energy saving. Gamma keys: `low` 1.9, `medium` and
+`mediumHavingLevel` 2.2, `high1` 2.4, `high2` BT.1886. Off/Low/Medium/High are translated. The
+Signal card shows the video format (SDR, HDR10, Dolby Vision), the audio format and its immersive
+layer (Dolby Atmos), game mode and FreeSync. TruMotion is not shown: the settings service reports
+no mode key (`truMotionMode` is refused and the blur and judder values did not change between
+modes). Settings the TV does not report are not shown. The section reads when it opens and every
 10 seconds while visible; it has no controls. Picture-mode and HDR names are LG's own English terms.
 
 The sections follow the native-tv menus: temperature, memory and storage belong to Metrics, panel

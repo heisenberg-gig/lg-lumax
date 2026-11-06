@@ -2797,6 +2797,13 @@ fn picture_settings(out: &mut Scene, state: &State) {
                 crate::tv_status::Reading::Text(t) if t == "off" => {
                     language.t("stateOff").to_owned()
                 }
+                crate::tv_status::Reading::Text(t) if t == "low" => language.t("tvLow").to_owned(),
+                crate::tv_status::Reading::Text(t) if t == "medium" => {
+                    language.t("tvMedium").to_owned()
+                }
+                crate::tv_status::Reading::Text(t) if t == "high" => {
+                    language.t("tvHigh").to_owned()
+                }
                 crate::tv_status::Reading::Text(t) => t.clone(),
             };
             (*key, value)
@@ -2804,6 +2811,8 @@ fn picture_settings(out: &mut Scene, state: &State) {
         .collect();
     let signal: Vec<(&str, String)> = [
         ("tvHdr", status.hdr.clone()),
+        ("tvAudio", status.audio.clone()),
+        ("tvAudioImmersive", status.audio_immersive.clone()),
         ("tvGameMode", on_off(status.game_mode)),
         ("tvFreesync", on_off(status.freesync)),
     ]

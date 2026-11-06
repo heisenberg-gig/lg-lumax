@@ -13,6 +13,14 @@ fn service(system: &impl System, name: &str, method: &str, payload: Value) -> Va
         .unwrap_or(Value::Null)
 }
 
+/// Sound services omit `returnValue` on some firmware; only an explicit `false` is a failure.
+fn unflagged_service(system: &impl System, name: &str, method: &str, payload: Value) -> Value {
+    system::luna_unflagged(system, name, method, &payload)
+        .ok()
+        .filter(|reply| reply["returnValue"] != false)
+        .unwrap_or(Value::Null)
+}
+
 /// Raw replies; Luma normalises them so parsing can be tested without a TV. The whole picture
 /// category is read (no key list), so a firmware without some key cannot fail the request.
 pub fn collect(system: &impl System) -> Result<Value> {
@@ -30,6 +38,13 @@ pub fn collect(system: &impl System) -> Result<Value> {
             "com.webos.service.videooutput",
             "getStatus",
             json!({"subscribe": false}),
+        ),
+        // The format of the sound that is playing (codec and Dolby Atmos layer).
+        "audio": unflagged_service(
+            system,
+            "com.webos.service.audio",
+            "tv/getAudioInputProperty",
+            json!({}),
         ),
     }))
 }
