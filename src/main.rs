@@ -1230,9 +1230,10 @@ fn run() -> Result<(), String> {
         }
         let system_active = focused
             && visible
-            && state.page == state::Page::Settings
-            && state.section == state::SYSTEM_SECTION
-            && state.overlay.is_none();
+            && ((state.page == state::Page::Settings
+                && state.section == state::SYSTEM_SECTION
+                && state.overlay.is_none())
+                || state.recents_open());
         if system_poller.due(Instant::now(), system_active) {
             platform.send(Request::SystemInfo);
         }

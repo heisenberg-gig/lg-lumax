@@ -2063,6 +2063,22 @@
     "nl": "Ingangen vernieuwen",
     "sv": "Uppdatera ingångar"
   },
+  "recentCloseHint": {
+    "zh-tw": "按「上」關閉所選應用程式",
+    "en": "Press Up to close the selected app",
+    "de": "Mit „Hoch“ die gewählte App schließen",
+    "es": "Pulsa Arriba para cerrar la app seleccionada",
+    "zh": "按“上”键关闭所选应用",
+    "pt": "Pressione Para cima para fechar o app selecionado",
+    "pt-pt": "Prime Cima para fechar a app selecionada",
+    "it": "Premi Su per chiudere l'app selezionata",
+    "ru": "Нажмите «Вверх», чтобы закрыть выбранное приложение",
+    "pl": "Naciśnij w górę, aby zamknąć wybraną aplikację",
+    "fr": "Appuyez sur Haut pour fermer l'app sélectionnée",
+    "vi": "Nhấn Lên để đóng ứng dụng đã chọn",
+    "nl": "Druk op Omhoog om de gekozen app te sluiten",
+    "sv": "Tryck Upp för att stänga vald app"
+  },
   "closeAll": {
     "zh-tw": "全部關閉",
     "en": "Close all",
