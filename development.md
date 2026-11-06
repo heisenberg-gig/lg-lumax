@@ -1072,10 +1072,10 @@ bytes read: `/sys` files advertise a whole page as their size and would fail the
 for regular files.
 
 `src/system_info.rs` parses them (tested in `src/system-info-tests.rs`) into four cards, two per
-column with the titles aligned: left TV Info (model, firmware, webOS, SoC, RAM, panel refresh,
-remote battery) and CPU (temperature, session timer, CPU load, CPU and GPU clocks, per-core load);
-right Memory and storage (free memory, swap, app storage, eMMC health) and Network (link, internet,
-network name, IP, mask, gateway, DNS, signal, interface and MAC, traffic). Readings the TV does not
+column with the titles aligned: left TV (model, firmware, webOS, SoC, RAM, panel refresh,
+remote battery) and Network (link, internet, network name, IP, mask, gateway, DNS, signal,
+interface and MAC, traffic); right CPU (temperature, session timer, CPU load, CPU and GPU clocks,
+per-core load) and Memory and storage (free memory, swap, app storage, eMMC health). Readings the TV does not
 report are not shown.
 
 The session timer is `tvpower/power/getPowerOnTime`'s `time.ontime`: seconds since the TV last
