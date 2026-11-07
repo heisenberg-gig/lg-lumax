@@ -59,6 +59,9 @@ impl TextStyle {
     }
 }
 
+/// Backdrop stops for an installed icon, and whether to leave the card clear instead.
+type AppBackdrop = ([[u8; 3]; 2], bool);
+
 #[derive(Clone)]
 pub enum Draw {
     Shape(Rect, f32, f32, Color),
@@ -73,7 +76,7 @@ pub enum Draw {
         Rect,
         f32,
         Color,
-        Option<[[u8; 3]; 2]>,
+        crate::app_artwork::Backdrop,
     ),
     Clip(Option<Rect>),
     EdgeFade(Option<[f32; 4]>),
@@ -195,7 +198,7 @@ enum BatchKind {
         texture: GLuint,
         start: usize,
         count: usize,
-        backdrop: Option<[[u8; 3]; 2]>,
+        backdrop: Option<AppBackdrop>,
     },
     Vector {
         path: String,
@@ -591,7 +594,7 @@ impl Renderer {
         border: f32,
         colors: [Color; 2],
         texture: GLuint,
-        backdrop: Option<[[u8; 3]; 2]>,
+        backdrop: Option<AppBackdrop>,
     ) {
         if rect.w <= 0. || rect.h <= 0. {
             return;
@@ -627,7 +630,7 @@ impl Renderer {
         start: usize,
         count: usize,
         texture: GLuint,
-        backdrop: Option<[[u8; 3]; 2]>,
+        backdrop: Option<AppBackdrop>,
     ) {
         if let Some(batch) = self.batches.last_mut() {
             let same_clip = match (batch.clip, self.clip) {
@@ -1111,7 +1114,7 @@ impl Renderer {
         rect: Rect,
         radius: f32,
         tint: Color,
-        backdrop: Option<[[u8; 3]; 2]>,
+        backdrop: crate::app_artwork::Backdrop,
     ) {
         let entry = self.textures.entry(image.key.clone()).or_insert_with(|| {
             Some(texture(
@@ -1141,7 +1144,11 @@ impl Renderer {
             0.,
             [tint; 2],
             id,
-            Some(backdrop.unwrap_or(image.backdrop)),
+            Some(match backdrop {
+                crate::app_artwork::Backdrop::Own => (image.backdrop, false),
+                crate::app_artwork::Backdrop::Color(stops) => (stops, false),
+                crate::app_artwork::Backdrop::Clear => (image.backdrop, true),
+            }),
         );
     }
 
@@ -1408,7 +1415,11 @@ impl Renderer {
                             gl::GetUniformLocation(self.program, c"u_app".as_ptr()),
                             i32::from(backdrop.is_some()),
                         );
-                        if let Some(stops) = backdrop {
+                        gl::Uniform1i(
+                            gl::GetUniformLocation(self.program, c"u_app_clear".as_ptr()),
+                            i32::from(backdrop.is_some_and(|(_, clear)| clear)),
+                        );
+                        if let Some((stops, _)) = backdrop {
                             for (name, rgb) in
                                 [(c"u_app_top", stops[0]), (c"u_app_bottom", stops[1])]
                             {

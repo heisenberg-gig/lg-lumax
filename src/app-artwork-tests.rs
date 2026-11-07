@@ -752,7 +752,7 @@ fn a_chosen_card_color_replaces_the_installed_icons_own_background() {
     let loaded = scene();
     // The chosen color becomes the icon's backdrop; the icon keeps its own art on top.
     assert!(loaded.draw.iter().any(|draw| matches!(draw,
-        crate::renderer::Draw::AppImage(_, _, _, _, Some(stops)) if *stops == [[0x1f, 0x3f, 0x7a]; 2]
+        crate::renderer::Draw::AppImage(_, _, _, _, crate::app_artwork::Backdrop::Color(stops)) if *stops == [[0x1f, 0x3f, 0x7a]; 2]
     )));
 }
 
@@ -786,4 +786,48 @@ fn icons_without_a_flat_edge_keep_their_background() {
     // A solid square with nothing on it has no logo to keep.
     let blank = RgbaImage::from_pixel(64, 64, Rgba([20, 20, 20, 255]));
     assert!(decode(&png(blank)).unwrap().cutout.is_none());
+}
+
+#[test]
+fn no_card_color_draws_installed_icons_with_a_clear_backdrop_and_no_border() {
+    let assets = crate::view::Assets {
+        root: PathBuf::new(),
+        version: "test".into(),
+        metrics: Default::default(),
+        artwork: Service::with_loader(true, |_| {
+            decode(&encoded(ImageFormat::Png, 32, 32, [24, 40, 56, 255]))
+        }),
+    };
+    let apps =
+        crate::platform::normalize_apps(&json!([{"id":"regional.app", "title":"Regional App"}]))
+            .unwrap();
+    let mut state = crate::state::State::new(Default::default());
+    state.preferences.card_color = crate::model::CardColor::Clear;
+    state.set_inventory(
+        crate::model::Inventory {
+            apps,
+            inputs: vec![],
+        },
+        None,
+    );
+    let scene = || {
+        crate::view::scene_with_pill(
+            &state,
+            &assets,
+            800.,
+            100.,
+            time::OffsetDateTime::UNIX_EPOCH,
+        )
+    };
+    poll_until(&assets.artwork, || {
+        scene()
+            .draw
+            .iter()
+            .any(|draw| matches!(draw, crate::renderer::Draw::AppImage(..)))
+    });
+    let loaded = scene();
+    assert!(loaded.draw.iter().any(|draw| matches!(
+        draw,
+        crate::renderer::Draw::AppImage(_, _, _, _, crate::app_artwork::Backdrop::Clear)
+    )));
 }

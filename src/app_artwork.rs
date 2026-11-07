@@ -71,6 +71,17 @@ impl Source {
     }
 }
 
+/// What sits behind an installed icon.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Backdrop {
+    /// The colour or gradient taken from the icon's own edges.
+    Own,
+    /// A colour chosen in Settings.
+    Color([[u8; 3]; 2]),
+    /// Nothing: only the icon's opaque pixels are drawn.
+    Clear,
+}
+
 pub struct Artwork {
     pub key: String,
     pub pixels: RgbaImage,

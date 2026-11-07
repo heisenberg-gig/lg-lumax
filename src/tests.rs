@@ -3190,3 +3190,20 @@ fn appearance_preferences_default_when_missing_from_saved_files() {
     assert!(!prefs.original_icons);
     assert_eq!(prefs.look().color, None);
 }
+
+#[test]
+fn card_color_cycle_ends_with_no_card_and_wraps_to_auto() {
+    use crate::model::CardColor;
+    let mut color = CardColor::Auto;
+    for _ in 1..CardColor::ALL.len() {
+        color = color.next();
+    }
+    assert_eq!(color, CardColor::Clear);
+    let prefs = crate::model::Preferences {
+        card_color: color,
+        ..Default::default()
+    };
+    assert!(prefs.look().clear);
+    assert_eq!(prefs.look().color, None);
+    assert_eq!(color.next(), CardColor::Auto);
+}

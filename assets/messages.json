@@ -2191,6 +2191,22 @@
     "nl": "Auto",
     "sv": "Auto"
   },
+  "colorNone": {
+    "zh-tw": "無",
+    "en": "None",
+    "de": "Keine",
+    "es": "Ninguno",
+    "zh": "无",
+    "pt": "Nenhum",
+    "pt-pt": "Nenhum",
+    "it": "Nessuno",
+    "ru": "Нет",
+    "pl": "Brak",
+    "fr": "Aucun",
+    "vi": "Không",
+    "nl": "Geen",
+    "sv": "Ingen"
+  },
   "colorGraphite": {
     "zh-tw": "石墨",
     "en": "Graphite",
