@@ -7,6 +7,7 @@ use serde_json::Value;
 pub struct SystemInfo {
     pub temperature_c: Option<u32>,
     pub cpu_load: Option<u32>,
+    pub cpu_model: Option<String>,
     pub cpu_mhz: Option<u32>,
     pub gpu_mhz: Option<u32>,
     pub core_loads: Vec<u32>,
@@ -191,6 +192,52 @@ fn storage(raw: &Value) -> Option<(u64, u64, u32)> {
             available,
             ((used as f64 / total as f64) * 100.).round() as u32,
         )
+    })
+}
+
+/// Core type and count from `/proc/cpuinfo`, e.g. "Cortex-A73 × 4". ARM cores are named from
+/// the implementer/part ids; other CPUs use their own model name.
+fn cpu_model(raw: &Value) -> Option<String> {
+    let mut cores = 0usize;
+    let (mut implementer, mut part, mut name) = (None, None, None);
+    for line in text(raw)?.lines() {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        let value = value.trim();
+        match key.trim() {
+            "processor" => cores += 1,
+            "CPU implementer" if implementer.is_none() => implementer = Some(value.to_lowercase()),
+            "CPU part" if part.is_none() => part = Some(value.to_lowercase()),
+            "model name" | "Hardware" if name.is_none() && !value.is_empty() => {
+                name = Some(value.chars().take(40).collect::<String>());
+            }
+            _ => {}
+        }
+    }
+    let arm = match (implementer.as_deref(), part.as_deref()) {
+        (Some("0x41"), Some(part)) => match part {
+            "0xc07" => Some("Cortex-A7"),
+            "0xc09" => Some("Cortex-A9"),
+            "0xc0f" => Some("Cortex-A15"),
+            "0xd03" => Some("Cortex-A53"),
+            "0xd04" => Some("Cortex-A35"),
+            "0xd05" => Some("Cortex-A55"),
+            "0xd07" => Some("Cortex-A57"),
+            "0xd08" => Some("Cortex-A72"),
+            "0xd09" => Some("Cortex-A73"),
+            "0xd0a" => Some("Cortex-A75"),
+            "0xd0b" => Some("Cortex-A76"),
+            "0xd0d" => Some("Cortex-A77"),
+            _ => None,
+        },
+        _ => None,
+    };
+    let label = arm.map(str::to_owned).or(name)?;
+    Some(if cores > 0 {
+        format!("{label} × {cores}")
+    } else {
+        label
     })
 }
 
@@ -412,6 +459,7 @@ pub fn normalize(reply: &Value) -> Result<SystemInfo, String> {
         temperature_c: temperature(&reply["temperature"]),
         cpu_load: (!loads.is_empty())
             .then(|| (loads.iter().sum::<u32>() as f64 / loads.len() as f64).round() as u32),
+        cpu_model: cpu_model(&reply["cpuinfo"]),
         cpu_mhz: frequency_mhz(&reply["frequency"]),
         gpu_mhz: gpu_mhz(&reply["gpu_status"]),
         core_loads: loads,
@@ -460,6 +508,7 @@ pub fn demo() -> SystemInfo {
     SystemInfo {
         temperature_c: Some(46),
         cpu_load: Some(12),
+        cpu_model: Some("Cortex-A73 × 4".into()),
         cpu_mhz: Some(1500),
         gpu_mhz: Some(800),
         core_loads: vec![14, 10, 18, 6],

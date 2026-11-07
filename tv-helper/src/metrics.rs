@@ -84,6 +84,7 @@ pub fn collect(system: &impl System) -> Result<Value> {
         "storage": storage(system),
         "environment": file(system, "/var/luna/preferences/environmentCondition", 64 * 1024),
         "chip_name": file(system, "/proc/lg/base/chip_name", 256),
+        "cpuinfo": file(system, "/proc/cpuinfo", 32 * 1024),
         "issue": file(system, "/etc/issue", 1024),
         "release": file(system, "/etc/starfish-release", 1024),
         "properties": service(

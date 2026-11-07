@@ -2298,7 +2298,7 @@ fn widgets_group_existing_settings_and_restore_each_parent_without_changing_pref
     }]);
     let saved = serde_json::to_value(&state.preferences).unwrap();
     state.open(2);
-    assert_eq!(SECTION_COUNT, 6);
+    assert_eq!(SECTION_COUNT, 7);
     assert!(
         !controls(&state)
             .iter()
@@ -3155,4 +3155,35 @@ fn system_section_is_read_only_shows_metrics_and_survives_a_failed_read() {
         Target::Sidebar(SYSTEM_SECTION),
         "Right stays on the sidebar"
     );
+}
+
+#[test]
+fn customize_rows_cycle_their_option_and_save() {
+    let mut state = ready();
+    state.open(2);
+    state.section = crate::state::CUSTOM_SECTION;
+    for index in 0..4 {
+        state.focus = Target::Custom(index);
+        assert_eq!(state.activate(), vec![Effect::Save]);
+    }
+    let prefs = &state.preferences;
+    assert_eq!(prefs.icon_shape, crate::model::IconShape::Square);
+    assert_eq!(prefs.card_color, crate::model::CardColor::Graphite);
+    assert_eq!(prefs.card_opacity, 90);
+    assert!(prefs.original_icons);
+    state.preferences.card_opacity = 40;
+    state.focus = Target::Custom(2);
+    state.activate();
+    assert_eq!(state.preferences.card_opacity, 100);
+    let look = state.preferences.look();
+    assert_eq!(look.radius, 6.);
+    assert_eq!(look.color, Some(0x2a2d31));
+}
+
+#[test]
+fn appearance_preferences_default_when_missing_from_saved_files() {
+    let prefs: crate::model::Preferences = serde_json::from_str("{}").unwrap();
+    assert_eq!(prefs.card_opacity, 100);
+    assert!(!prefs.original_icons);
+    assert_eq!(prefs.look().color, None);
 }

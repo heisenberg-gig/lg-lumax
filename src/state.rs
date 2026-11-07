@@ -9,11 +9,12 @@ use serde::Serialize;
 use std::time::{Duration, Instant};
 
 // The sidebar order: General, Background, Picture, OLED Care, Widgets, System.
-pub const PICTURE_SECTION: usize = 2;
-pub const OLED_SECTION: usize = 3;
-pub const WIDGETS_SECTION: usize = 4;
-pub const SYSTEM_SECTION: usize = 5;
-pub const SECTION_COUNT: usize = 6;
+pub const CUSTOM_SECTION: usize = 2;
+pub const PICTURE_SECTION: usize = 3;
+pub const OLED_SECTION: usize = 4;
+pub const WIDGETS_SECTION: usize = 5;
+pub const SYSTEM_SECTION: usize = 6;
+pub const SECTION_COUNT: usize = 7;
 pub const SETTINGS_BOTTOM_PADDING: f32 = 64.;
 pub const SETTINGS_LIST_BOTTOM_PADDING: f32 = 48.;
 pub const APPS_COLUMNS: usize = 6;
@@ -64,6 +65,7 @@ pub enum Target {
     ClearSearch,
     Sidebar(usize),
     Setting(usize),
+    Custom(usize),
     Widget(usize),
     GreetingName,
     GreetingNameClear,
@@ -1052,6 +1054,7 @@ impl State {
             WIDGETS_SECTION => Target::Widget(4),
             // Read-only pages have nothing to focus, so the sidebar keeps focus.
             SYSTEM_SECTION | PICTURE_SECTION | OLED_SECTION => Target::Sidebar(self.section),
+            CUSTOM_SECTION => Target::Custom(0),
             _ => Target::Setting(0),
         }
     }
@@ -1338,6 +1341,9 @@ impl State {
             {
                 return self.activate();
             }
+            if matches!(self.focus, Target::Custom(_)) && matches!(direction, Direction::Right) {
+                return self.activate();
+            }
             if matches!(self.focus, Target::Setting(_) | Target::WeatherToggle)
                 && matches!(direction, Direction::Right)
             {
@@ -1354,7 +1360,9 @@ impl State {
                 self.focus(Target::Nav(2), controls);
                 return vec![];
             }
-            if self.focus == Target::Setting(0) && matches!(direction, Direction::Up) {
+            if matches!(self.focus, Target::Setting(0) | Target::Custom(0))
+                && matches!(direction, Direction::Up)
+            {
                 self.focus(Target::Nav(2), controls);
                 return vec![];
             }
@@ -2280,6 +2288,22 @@ impl State {
                         return vec![];
                     }
                     _ => return vec![Effect::Reload],
+                }
+                return vec![Effect::Save];
+            }
+            Target::Custom(index) => {
+                let prefs = &mut self.preferences;
+                match index {
+                    0 => prefs.icon_shape = prefs.icon_shape.next(),
+                    1 => prefs.card_color = prefs.card_color.next(),
+                    2 => {
+                        prefs.card_opacity = if prefs.card_opacity <= 40 {
+                            100
+                        } else {
+                            prefs.card_opacity.clamp(40, 100) - 10
+                        }
+                    }
+                    _ => prefs.original_icons = !prefs.original_icons,
                 }
                 return vec![Effect::Save];
             }

@@ -212,6 +212,106 @@ impl DateFormat {
     }
 }
 
+/// Corner style of the app cards on Home and in Apps.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IconShape {
+    #[default]
+    Rounded,
+    Square,
+    Soft,
+}
+
+impl IconShape {
+    pub const ALL: [Self; 3] = [Self::Rounded, Self::Square, Self::Soft];
+
+    pub fn radius(self) -> f32 {
+        match self {
+            Self::Rounded => 19.2,
+            Self::Square => 6.,
+            Self::Soft => 40.,
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Rounded => "shapeRounded",
+            Self::Square => "shapeSquare",
+            Self::Soft => "shapeSoft",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        Self::ALL[(self as usize + 1) % Self::ALL.len()]
+    }
+}
+
+/// Background of the app cards, replacing each app's own dark surface.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CardColor {
+    #[default]
+    Auto,
+    Graphite,
+    Blue,
+    Purple,
+    Green,
+    Red,
+}
+
+impl CardColor {
+    pub const ALL: [Self; 6] = [
+        Self::Auto,
+        Self::Graphite,
+        Self::Blue,
+        Self::Purple,
+        Self::Green,
+        Self::Red,
+    ];
+
+    /// RGB of the replacement surface; `None` keeps each app's own.
+    pub fn rgb(self) -> Option<u32> {
+        match self {
+            Self::Auto => None,
+            Self::Graphite => Some(0x2a2d31),
+            Self::Blue => Some(0x1f3f7a),
+            Self::Purple => Some(0x4a2a7a),
+            Self::Green => Some(0x1f5a3d),
+            Self::Red => Some(0x7a2a2a),
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Auto => "colorAuto",
+            Self::Graphite => "colorGraphite",
+            Self::Blue => "colorBlue",
+            Self::Purple => "colorPurple",
+            Self::Green => "colorGreen",
+            Self::Red => "colorRed",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        Self::ALL[(self as usize + 1) % Self::ALL.len()]
+    }
+}
+
+/// How app cards are drawn, copied out of the preferences for the renderer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Look {
+    pub radius: f32,
+    pub color: Option<u32>,
+    pub opacity: f32,
+    pub original_icons: bool,
+}
+
+impl Default for Look {
+    fn default() -> Self {
+        Preferences::default().look()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Preferences {
@@ -251,6 +351,23 @@ pub struct Preferences {
     pub wallpaper_gradient: bool,
     /// Unix seconds of the last automatic or chosen wallpaper change, for the timed modes.
     pub wallpaper_changed: u64,
+    pub icon_shape: IconShape,
+    pub card_color: CardColor,
+    /// Opacity of the card surface in percent, 40 to 100.
+    pub card_opacity: u8,
+    /// Use each installed app's own icon instead of Luma's drawn logo.
+    pub original_icons: bool,
+}
+
+impl Preferences {
+    pub fn look(&self) -> Look {
+        Look {
+            radius: self.icon_shape.radius(),
+            color: self.card_color.rgb(),
+            opacity: f32::from(self.card_opacity.clamp(40, 100)) / 100.,
+            original_icons: self.original_icons,
+        }
+    }
 }
 
 impl Default for Preferences {
@@ -281,6 +398,10 @@ impl Default for Preferences {
             wallpaper_cycle: false,
             wallpaper_gradient: true,
             wallpaper_changed: 0,
+            icon_shape: IconShape::default(),
+            card_color: CardColor::default(),
+            card_opacity: 100,
+            original_icons: false,
         }
     }
 }

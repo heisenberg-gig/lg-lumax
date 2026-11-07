@@ -1,12 +1,13 @@
 //! Screen geometry and styling mirror the web UI's 1920×1080 / 16px-rem layout.
 use crate::{
     i18n::Language,
-    model::{App, BACKGROUNDS, CATEGORIES, Input, InputMode},
+    model::{App, BACKGROUNDS, CATEGORIES, Input, InputMode, Look},
     renderer::{Color, Draw, TextStyle, WHITE},
     state::{
-        APPS_COLUMNS, Control, HOME_FADE_LEFT, HOME_FADE_RIGHT, HOME_STRIP_LEFT, HOME_STRIP_RIGHT,
-        HOME_TILE_PITCH, HOME_TILE_WIDTH, KEYS, OLED_SECTION, Overlay, PICTURE_SECTION, Page, Rect,
-        SYSTEM_SECTION, State, Subpage, Target, TextField, WIDGETS_SECTION,
+        APPS_COLUMNS, CUSTOM_SECTION, Control, HOME_FADE_LEFT, HOME_FADE_RIGHT, HOME_STRIP_LEFT,
+        HOME_STRIP_RIGHT, HOME_TILE_PITCH, HOME_TILE_WIDTH, KEYS, OLED_SECTION, Overlay,
+        PICTURE_SECTION, Page, Rect, SYSTEM_SECTION, State, Subpage, Target, TextField,
+        WIDGETS_SECTION,
     },
     weather::{self, Unit},
 };
@@ -824,9 +825,18 @@ fn tile(
         19.2,
         if focused { 34. } else { 22. },
         if focused { 14. } else { 9. },
-        if focused { 0.4 } else { 0.165 },
+        (if focused { 0.4 } else { 0.165 }) * state.preferences.look().opacity,
     );
-    let favorite_color = app_face(out, assets, app, rect, state.preferences.language, 19.2);
+    let look = state.preferences.look();
+    let favorite_color = app_face(
+        out,
+        assets,
+        app,
+        rect,
+        state.preferences.language,
+        look.radius,
+        look,
+    );
     if pinned {
         favorite_badge(out, assets, rect, favorite_color);
     }
@@ -905,16 +915,18 @@ fn app_face(
     rect: Rect,
     language: Language,
     radius: f32,
+    look: Look,
 ) -> Color {
-    let logo = crate::branding::for_key(&app.brand);
-    let artwork = logo
-        .is_none()
-        .then(|| {
-            app.icon
-                .as_ref()
-                .and_then(|source| assets.artwork.get(source))
-        })
-        .flatten();
+    let installed_icon = app
+        .icon
+        .as_ref()
+        .and_then(|source| assets.artwork.get(source));
+    let logo = if look.original_icons && installed_icon.is_some() {
+        None
+    } else {
+        crate::branding::for_key(&app.brand)
+    };
+    let artwork = logo.is_none().then_some(installed_icon).flatten();
     // The heart's centre is 19.2px below the top, outside the inset installed icon.
     // Bundled and generic surfaces are dark, so their badge remains white.
     let favorite_color = if artwork
@@ -926,8 +938,11 @@ fn app_face(
         c(0xffffff, 1.)
     };
     let installed = artwork.is_some();
+    let surface = out.draw.len();
     if let Some(image) = artwork {
         out.draw.push(Draw::AppImage(image, rect, radius, [1.; 4]));
+    } else if let Some(rgb) = look.color {
+        out.shape(rect, radius, c(rgb, 1.));
     } else {
         out.image(
             assets.path(format!("surfaces/{}.png", app.brand)),
@@ -935,6 +950,9 @@ fn app_face(
             radius,
             false,
         );
+    }
+    if look.opacity < 1. {
+        out.fade(surface, look.opacity, 1.);
     }
     out.border(rect, radius, 1., c(0xffffff, 0.063));
     if let Some(brand) = logo {
@@ -2076,6 +2094,7 @@ fn settings_sidebar(out: &mut Scene, state: &State, assets: &Assets) {
     for (index, key) in [
         "interface",
         "background",
+        "customize",
         "picture",
         "oled",
         "widgets",
@@ -2551,6 +2570,7 @@ fn settings_content(out: &mut Scene, state: &State, assets: &Assets) {
                 );
             }
         }
+        CUSTOM_SECTION => custom_settings(out, state, assets),
         SYSTEM_SECTION => system_settings(out, state),
         PICTURE_SECTION => picture_settings(out, state),
         OLED_SECTION => oled_settings(out, state),
@@ -2713,6 +2733,7 @@ fn system_settings(out: &mut Scene, state: &State) {
             .collect()
     };
     let load = keep(vec![
+        ("sysCpuModel", info.cpu_model.clone()),
         (
             "sysTemperature",
             info.temperature_c.map(|v| format!("{v} °C")),
@@ -2803,31 +2824,6 @@ fn system_settings(out: &mut Scene, state: &State) {
         ("netMask", net.netmask.clone()),
         ("netGateway", net.gateway.clone()),
         ("netDns", (!net.dns.is_empty()).then(|| net.dns.join(", "))),
-        (
-            "netSignal",
-            net.signal_dbm
-                .zip(net.signal_quality)
-                .map(|(dbm, quality)| {
-                    language.format(
-                        "netSignalValue",
-                        &[("dbm", &dbm.to_string()), ("quality", &quality.to_string())],
-                    )
-                }),
-        ),
-        (
-            "netInterface",
-            match (&net.interface, &net.mac) {
-                (Some(name), Some(mac)) => Some(format!("{name} · {mac}")),
-                (Some(name), None) => Some(name.clone()),
-                _ => None,
-            },
-        ),
-        (
-            "netTraffic",
-            net.rx_bytes
-                .zip(net.tx_bytes)
-                .map(|(rx, tx)| format!("RX {} · TX {}", size(rx / 1024), size(tx / 1024))),
-        ),
     ]);
     // Two columns keep every reading on one 1080p screen.
     let top = 164.8 - s;
@@ -2835,16 +2831,16 @@ fn system_settings(out: &mut Scene, state: &State) {
     // Both rows start at the same height in each column, so the titles line up even when the
     // card above one of them is shorter.
     let mut left_y = top;
-    if !load.is_empty() {
-        left_y = reading_card(out, language.t("sysLoad"), &load, left, top);
+    if !tv.is_empty() {
+        left_y = reading_card(out, language.t("sysThisTv"), &tv, left, top);
     }
     let mut right_y = top;
-    if !tv.is_empty() {
-        right_y = reading_card(out, language.t("sysThisTv"), &tv, right, top);
+    if !memory.is_empty() {
+        right_y = reading_card(out, language.t("sysMemoryStorage"), &memory, right, top);
     }
     let second = left_y.max(right_y);
-    if !memory.is_empty() {
-        reading_card(out, language.t("sysMemoryStorage"), &memory, left, second);
+    if !load.is_empty() {
+        reading_card(out, language.t("sysLoad"), &load, left, second);
     }
     if !network.is_empty() {
         reading_card(out, language.t("netHeading"), &network, right, second);
@@ -3502,7 +3498,15 @@ fn options(out: &mut Scene, state: &State, assets: &Assets, id: &str, anchor: Op
         out.image(path, card, 16., false);
         out.border(card, 16., 1., c(0xffffff, 0.086));
     } else if let Some(app) = app.filter(|_| !shortcut) {
-        let favorite_color = app_face(out, assets, app, card, language, 19.2);
+        let favorite_color = app_face(
+            out,
+            assets,
+            app,
+            card,
+            language,
+            19.2,
+            state.preferences.look(),
+        );
         if favorite {
             favorite_badge(out, assets, card, favorite_color);
         }
@@ -3859,6 +3863,60 @@ fn full_screen_fill(draw: &Draw) -> bool {
     }
 }
 
+/// Appearance of the app cards: one row per option (OK cycles it) beside a live sample card.
+fn custom_settings(out: &mut Scene, state: &State, assets: &Assets) {
+    let language = state.preferences.language;
+    let s = state.scroll;
+    let prefs = &state.preferences;
+    let rows = [
+        (
+            "iconShape",
+            "grid",
+            language.t(prefs.icon_shape.key()).to_owned(),
+        ),
+        (
+            "cardColor",
+            "sparkles",
+            language.t(prefs.card_color.key()).to_owned(),
+        ),
+        ("cardOpacity", "eye", format!("{}%", prefs.card_opacity)),
+        (
+            "originalIcons",
+            "generic",
+            language
+                .t(if prefs.original_icons {
+                    "stateOn"
+                } else {
+                    "stateOff"
+                })
+                .to_owned(),
+        ),
+    ];
+    for (index, (key, icon, value)) in rows.into_iter().enumerate() {
+        row(
+            out,
+            state,
+            assets,
+            Row {
+                target: Target::Custom(index),
+                rect: Rect::new(640., 164.8 + index as f32 * 84. - s, 760., 72.),
+                title: language.t(key),
+                icon: Some(icon),
+                value: Some(value.as_str()),
+                description: None,
+                selected: false,
+                chevron: false,
+            },
+        );
+    }
+    if let Some(app) = state.apps().first() {
+        let rect = Rect::new(1480., 164.8 - s, 270., FACE_HEIGHT);
+        let look = prefs.look();
+        out.shadow(rect, look.radius, 22., 9., 0.165 * look.opacity);
+        app_face(out, assets, app, rect, language, look.radius, look);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3902,7 +3960,7 @@ mod tests {
                     .iter()
                     .filter_map(|draw| match draw {
                         Draw::Text(label, rect, style, color, _)
-                            if (rect.y - 524.3).abs() < 0.001 =>
+                            if (rect.y - 608.3).abs() < 0.001 =>
                         {
                             Some((label, rect, style, color))
                         }
@@ -3920,7 +3978,7 @@ mod tests {
                     .iter()
                     .filter_map(|draw| match draw {
                         Draw::TintedImage(_, rect, _, _, color)
-                            if (rect.y - 527.8).abs() < 0.001 =>
+                            if (rect.y - 611.8).abs() < 0.001 =>
                         {
                             assert_eq!(color, parts[0].3);
                             Some(rect)
