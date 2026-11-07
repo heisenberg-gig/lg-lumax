@@ -259,7 +259,7 @@ impl Scene {
                 | Draw::Shadow(_, _, _, color)
                 | Draw::Text(_, _, _, color, _)
                 | Draw::TintedImage(_, _, _, _, color)
-                | Draw::AppImage(_, _, _, color) => apply(color),
+                | Draw::AppImage(_, _, _, color, _) => apply(color),
                 Draw::RoundedGradient(_, _, a, b) => {
                     apply(a);
                     apply(b);
@@ -940,18 +940,18 @@ fn app_face(
     let installed = artwork.is_some();
     let surface = out.draw.len();
     if let Some(image) = artwork {
-        if let Some(rgb) = look.color {
-            // The app's own art brings its own background, so the chosen color becomes the card
-            // and the icon sits inset on it.
-            out.shape(rect, radius, c(rgb, 1.));
-            let side = rect.h * 0.62;
-            let (cx, cy) = rect.center();
-            let inset = Rect::new(cx - side / 2., cy - side / 2., side, side);
-            out.draw
-                .push(Draw::AppImage(image, inset, side * 0.22, [1.; 4]));
+        let image = if look.remove_background {
+            image.cutout.clone().unwrap_or(image)
         } else {
-            out.draw.push(Draw::AppImage(image, rect, radius, [1.; 4]));
-        }
+            image
+        };
+        // A chosen color replaces the icon's own backdrop; the icon stays inset on it.
+        let backdrop = look.color.map(|rgb| {
+            let rgb = [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8];
+            [rgb; 2]
+        });
+        out.draw
+            .push(Draw::AppImage(image, rect, radius, [1.; 4], backdrop));
     } else if let Some(rgb) = look.color {
         out.shape(rect, radius, c(rgb, 1.));
     } else {
@@ -3896,6 +3896,17 @@ fn custom_settings(out: &mut Scene, state: &State, assets: &Assets) {
             "generic",
             language
                 .t(if prefs.original_icons {
+                    "stateOn"
+                } else {
+                    "stateOff"
+                })
+                .to_owned(),
+        ),
+        (
+            "removeIconBackground",
+            "generic",
+            language
+                .t(if prefs.remove_icon_background {
                     "stateOn"
                 } else {
                     "stateOff"

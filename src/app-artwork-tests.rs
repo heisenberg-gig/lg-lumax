@@ -389,6 +389,7 @@ fn hundreds_of_apps_stay_within_the_cache_bounds_across_refreshes() {
             key: String::new(),
             pixels: RgbaImage::new(256, 256),
             backdrop: [[20; 3]; 2],
+            cutout: None,
         })
     });
     for number in 0..300 {
@@ -419,6 +420,7 @@ fn decoded_cache_evicts_old_icons_when_scrolling_through_many_apps() {
             key: String::new(),
             pixels: RgbaImage::new(256, 256),
             backdrop: [[20; 3]; 2],
+            cutout: None,
         })
     });
     for number in 0..80 {
@@ -586,7 +588,7 @@ fn visible_cards_switch_from_fallback_to_a_single_composited_installed_surface()
         .draw
         .iter()
         .find_map(|draw| match draw {
-            crate::renderer::Draw::AppImage(image, rect, radius, _) => Some((image, rect, radius)),
+            crate::renderer::Draw::AppImage(image, rect, radius, ..) => Some((image, rect, radius)),
             _ => None,
         })
         .unwrap();
@@ -748,16 +750,40 @@ fn a_chosen_card_color_replaces_the_installed_icons_own_background() {
             .any(|draw| matches!(draw, crate::renderer::Draw::AppImage(..)))
     });
     let loaded = scene();
-    let icon = loaded
-        .draw
-        .iter()
-        .find_map(|draw| match draw {
-            crate::renderer::Draw::AppImage(_, rect, ..) => Some(*rect),
-            _ => None,
-        })
-        .unwrap();
-    // The chosen color fills a card larger than the inset icon.
+    // The chosen color becomes the icon's backdrop; the icon keeps its own art on top.
     assert!(loaded.draw.iter().any(|draw| matches!(draw,
-        crate::renderer::Draw::Shape(rect, _, 0., _) if rect.w > icon.w && rect.h > icon.h
+        crate::renderer::Draw::AppImage(_, _, _, _, Some(stops)) if *stops == [[0x1f, 0x3f, 0x7a]; 2]
     )));
+}
+
+fn icon_with_flat_background() -> RgbaImage {
+    // A dark square with a bright logo block in the middle.
+    let mut image = RgbaImage::from_pixel(64, 64, Rgba([20, 20, 20, 255]));
+    for y in 22..42 {
+        for x in 22..42 {
+            image.put_pixel(x, y, Rgba([230, 60, 60, 255]));
+        }
+    }
+    image
+}
+
+#[test]
+fn a_flat_icon_background_is_removed_but_the_logo_stays() {
+    let artwork = decode(&png(icon_with_flat_background())).unwrap();
+    let cutout = artwork.cutout.expect("flat background is removable");
+    let (width, height) = cutout.pixels.dimensions();
+    assert_eq!(cutout.pixels.get_pixel(2, 2)[3], 0);
+    assert_eq!(cutout.pixels.get_pixel(width / 2, height / 2)[3], 255);
+}
+
+#[test]
+fn icons_without_a_flat_edge_keep_their_background() {
+    let mut gradient = RgbaImage::new(64, 64);
+    for (x, y, pixel) in gradient.enumerate_pixels_mut() {
+        *pixel = Rgba([(x * 4) as u8, (y * 4) as u8, 120, 255]);
+    }
+    assert!(decode(&png(gradient)).unwrap().cutout.is_none());
+    // A solid square with nothing on it has no logo to keep.
+    let blank = RgbaImage::from_pixel(64, 64, Rgba([20, 20, 20, 255]));
+    assert!(decode(&png(blank)).unwrap().cutout.is_none());
 }

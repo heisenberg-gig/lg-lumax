@@ -2287,6 +2287,22 @@
     "nl": "Kaartdekking",
     "sv": "Kortets opacitet"
   },
+  "removeIconBackground": {
+    "zh-tw": "移除圖示背景",
+    "en": "Remove icon background",
+    "de": "Symbolhintergrund entfernen",
+    "es": "Quitar fondo de los iconos",
+    "zh": "移除图标背景",
+    "pt": "Remover fundo dos ícones",
+    "pt-pt": "Remover fundo dos ícones",
+    "it": "Rimuovi sfondo icone",
+    "ru": "Убрать фон значков",
+    "pl": "Usuń tło ikon",
+    "fr": "Retirer le fond des icônes",
+    "vi": "Xóa nền biểu tượng",
+    "nl": "Pictogramachtergrond verwijderen",
+    "sv": "Ta bort ikonbakgrund"
+  },
   "originalIcons": {
     "zh-tw": "原始圖示",
     "en": "Original icons",

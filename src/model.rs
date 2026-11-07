@@ -304,6 +304,7 @@ pub struct Look {
     pub color: Option<u32>,
     pub opacity: f32,
     pub original_icons: bool,
+    pub remove_background: bool,
 }
 
 impl Default for Look {
@@ -357,6 +358,8 @@ pub struct Preferences {
     pub card_opacity: u8,
     /// Use each installed app's own icon instead of Luma's drawn logo.
     pub original_icons: bool,
+    /// Erase flat backgrounds from installed app icons so the card color shows around the logo.
+    pub remove_icon_background: bool,
 }
 
 impl Preferences {
@@ -366,6 +369,7 @@ impl Preferences {
             color: self.card_color.rgb(),
             opacity: f32::from(self.card_opacity.clamp(40, 100)) / 100.,
             original_icons: self.original_icons,
+            remove_background: self.remove_icon_background,
         }
     }
 }
@@ -402,6 +406,7 @@ impl Default for Preferences {
             card_color: CardColor::default(),
             card_opacity: 100,
             original_icons: false,
+            remove_icon_background: false,
         }
     }
 }
