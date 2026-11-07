@@ -68,7 +68,13 @@ pub enum Draw {
     Image(String, Rect, f32, bool),
     TintedImage(String, Rect, f32, bool, Color),
     /// Installed icon and its backdrop, composited before opacity and edge fading.
-    AppImage(Arc<crate::app_artwork::Artwork>, Rect, f32, Color),
+    AppImage(
+        Arc<crate::app_artwork::Artwork>,
+        Rect,
+        f32,
+        Color,
+        Option<[[u8; 3]; 2]>,
+    ),
     Clip(Option<Rect>),
     EdgeFade(Option<[f32; 4]>),
     /// Horizontal counterpart: [left fade-in start, end, right fade-out start, end].
@@ -1105,6 +1111,7 @@ impl Renderer {
         rect: Rect,
         radius: f32,
         tint: Color,
+        backdrop: Option<[[u8; 3]; 2]>,
     ) {
         let entry = self.textures.entry(image.key.clone()).or_insert_with(|| {
             Some(texture(
@@ -1134,7 +1141,7 @@ impl Renderer {
             0.,
             [tint; 2],
             id,
-            Some(image.backdrop),
+            Some(backdrop.unwrap_or(image.backdrop)),
         );
     }
 
@@ -1269,8 +1276,8 @@ impl Renderer {
                 Draw::TintedImage(path, rect, radius, contain, tint) => {
                     self.image(path, *rect, *radius, *contain, *tint)
                 }
-                Draw::AppImage(image, rect, radius, tint) => {
-                    self.app_image(image, *rect, *radius, *tint)
+                Draw::AppImage(image, rect, radius, tint, backdrop) => {
+                    self.app_image(image, *rect, *radius, *tint, *backdrop)
                 }
                 Draw::Clip(clip) => self.clip = *clip,
                 Draw::EdgeFade(fade) => self.set_fade(0, *fade),

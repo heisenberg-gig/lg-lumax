@@ -2303,7 +2303,8 @@ impl State {
                             prefs.card_opacity.clamp(40, 100) - 10
                         }
                     }
-                    _ => prefs.original_icons = !prefs.original_icons,
+                    3 => prefs.original_icons = !prefs.original_icons,
+                    _ => prefs.remove_icon_background = !prefs.remove_icon_background,
                 }
                 return vec![Effect::Save];
             }

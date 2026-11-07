@@ -1175,3 +1175,9 @@ Settings → Customize (after Background) holds the card look: `icon_shape`, `ca
 turns them into a `Look` that `app_face` applies: a chosen color replaces the app's drawn
 surface, opacity fades only the surface (never the logo or border), and original icons prefer the
 installed app's own artwork over Luma's curated logo.
+
+Installed icons are decoded once into two textures: the original and, when its edge is one solid
+colour (`remove_background` in `app_artwork.rs`), a cut-out with that colour flood-filled away
+from the edges and a softened rim. Icons with gradient or photographic edges, or where removal
+would erase almost everything, get no cut-out and are drawn unchanged. A chosen card color is
+passed as the icon's backdrop override in `Draw::AppImage`.

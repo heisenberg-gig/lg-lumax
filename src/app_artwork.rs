@@ -76,6 +76,8 @@ pub struct Artwork {
     pub pixels: RgbaImage,
     /// The card behind the icon: top and bottom of a vertical gradient (equal when flat).
     pub backdrop: [[u8; 3]; 2],
+    /// The same icon with a flat background removed, when it has one that can be told apart.
+    pub cutout: Option<Arc<Artwork>>,
 }
 
 impl Artwork {
@@ -139,11 +141,133 @@ fn decode(bytes: &[u8]) -> Option<Artwork> {
     let image = reader.decode().ok()?;
     let pixels = thumbnail(image.into_rgba8());
     let backdrop = backdrop(&pixels);
+    let cutout = remove_background(&pixels).map(|pixels| {
+        let backdrop = logo_backdrop(&pixels);
+        Arc::new(Artwork {
+            key: String::new(),
+            pixels,
+            backdrop,
+            cutout: None,
+        })
+    });
     Some(Artwork {
         key: String::new(),
         pixels,
         backdrop,
+        cutout,
     })
+}
+
+/// Erases a flat background that touches the icon's edges, leaving the logo on transparency.
+/// Returns `None` when the edges are not one solid colour (photos, gradients) or when removal
+/// would erase nearly everything or nothing, so such icons stay as they are.
+fn remove_background(image: &RgbaImage) -> Option<RgbaImage> {
+    const SAME: i32 = 30;
+    const SOFT: i32 = 110;
+    let (width, height) = image.dimensions();
+    if width < 16 || height < 16 {
+        return None;
+    }
+    let edge: Vec<(u32, u32)> = (0..width)
+        .flat_map(|x| [(x, 0), (x, height - 1)])
+        .chain((0..height).flat_map(|y| [(0, y), (width - 1, y)]))
+        .collect();
+    let mut colors: Vec<[u8; 3]> = edge
+        .iter()
+        .map(|&(x, y)| *image.get_pixel(x, y))
+        .filter(|pixel| pixel[3] >= 230)
+        .map(|pixel| [pixel[0], pixel[1], pixel[2]])
+        .collect();
+    // Rounded corners are transparent, but most of the edge must be solid.
+    if colors.len() * 4 < edge.len() * 3 {
+        return None;
+    }
+    let background: [u8; 3] = std::array::from_fn(|channel| {
+        colors.sort_unstable_by_key(|color| color[channel]);
+        colors[colors.len() / 2][channel]
+    });
+    let distance = |pixel: &image::Rgba<u8>| -> i32 {
+        (0..3)
+            .map(|channel| (pixel[channel] as i32 - background[channel] as i32).abs())
+            .sum()
+    };
+    let flat = colors
+        .iter()
+        .filter(|color| {
+            (0..3)
+                .map(|channel| (color[channel] as i32 - background[channel] as i32).abs())
+                .sum::<i32>()
+                <= SAME
+        })
+        .count();
+    if flat * 100 < colors.len() * 85 {
+        return None;
+    }
+    let index = |x: u32, y: u32| (y * width + x) as usize;
+    let background_like = |x: u32, y: u32| {
+        let pixel = image.get_pixel(x, y);
+        pixel[3] < 230 || distance(pixel) <= SAME
+    };
+    let mut region = vec![false; (width * height) as usize];
+    let mut stack = Vec::new();
+    for &(x, y) in &edge {
+        if background_like(x, y) && !region[index(x, y)] {
+            region[index(x, y)] = true;
+            stack.push((x, y));
+        }
+    }
+    while let Some((x, y)) = stack.pop() {
+        for (nx, ny) in [
+            (x.wrapping_sub(1), y),
+            (x + 1, y),
+            (x, y.wrapping_sub(1)),
+            (x, y + 1),
+        ] {
+            if nx < width && ny < height && !region[index(nx, ny)] && background_like(nx, ny) {
+                region[index(nx, ny)] = true;
+                stack.push((nx, ny));
+            }
+        }
+    }
+    let removed = region.iter().filter(|inside| **inside).count();
+    let total = region.len();
+    if removed * 100 < total * 12 || removed * 100 > total * 92 {
+        return None;
+    }
+    let mut cut = image.clone();
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = cut.get_pixel_mut(x, y);
+            if region[index(x, y)] {
+                pixel[3] = 0;
+                continue;
+            }
+            // Anti-aliased rim: fade pixels beside the removed area by their distance from it.
+            let beside = [
+                (x.wrapping_sub(1), y),
+                (x + 1, y),
+                (x, y.wrapping_sub(1)),
+                (x, y + 1),
+            ]
+            .iter()
+            .any(|&(nx, ny)| nx < width && ny < height && region[index(nx, ny)]);
+            if beside {
+                let distance = (0..3)
+                    .map(|channel| (pixel[channel] as i32 - background[channel] as i32).abs())
+                    .sum::<i32>();
+                if distance < SOFT {
+                    let keep = ((distance - SAME).max(0) * 255 / (SOFT - SAME)) as u32;
+                    pixel[3] = (pixel[3] as u32 * keep / 255) as u8;
+                }
+            }
+        }
+    }
+    let kept = cut.pixels().filter(|pixel| pixel[3] > 128).count();
+    if kept * 100 < total * 2 {
+        return None;
+    }
+    bleed(&mut cut, 6);
+    Some(cut)
 }
 
 /// Scales with premultiplied alpha, so the colour of transparent pixels (often black) never
@@ -531,6 +655,9 @@ impl Service {
                     };
                     let image = loader(&request.source).map(|mut image| {
                         image.key = format!("installed-icon:{}", request.token);
+                        if let Some(cutout) = image.cutout.as_mut().and_then(Arc::get_mut) {
+                            cutout.key = format!("installed-icon-cutout:{}", request.token);
+                        }
                         Arc::new(image)
                     });
                     if responses.send(Reply { request, image }).is_err() {

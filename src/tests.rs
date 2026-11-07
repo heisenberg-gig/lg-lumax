@@ -3162,7 +3162,7 @@ fn customize_rows_cycle_their_option_and_save() {
     let mut state = ready();
     state.open(2);
     state.section = crate::state::CUSTOM_SECTION;
-    for index in 0..4 {
+    for index in 0..5 {
         state.focus = Target::Custom(index);
         assert_eq!(state.activate(), vec![Effect::Save]);
     }
@@ -3171,6 +3171,7 @@ fn customize_rows_cycle_their_option_and_save() {
     assert_eq!(prefs.card_color, crate::model::CardColor::Graphite);
     assert_eq!(prefs.card_opacity, 90);
     assert!(prefs.original_icons);
+    assert!(prefs.remove_icon_background);
     state.preferences.card_opacity = 40;
     state.focus = Target::Custom(2);
     state.activate();
