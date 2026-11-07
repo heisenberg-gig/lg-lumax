@@ -2304,7 +2304,9 @@ impl State {
                         }
                     }
                     3 => prefs.original_icons = !prefs.original_icons,
-                    _ => prefs.remove_icon_background = !prefs.remove_icon_background,
+                    4 => prefs.remove_icon_background = !prefs.remove_icon_background,
+                    5 => prefs.clock_style = prefs.clock_style.next(),
+                    _ => prefs.clock_size = prefs.clock_size.next(),
                 }
                 return vec![Effect::Save];
             }
