@@ -241,6 +241,17 @@ fn cpu_model(raw: &Value) -> Option<String> {
     })
 }
 
+/// 2025 OLED C, G and M models (e.g. OLED55C54LA) use the Alpha 9 AI Gen8.
+fn soc_from_model(model: &str) -> Option<&'static str> {
+    let rest = model
+        .strip_prefix("OLED")?
+        .trim_start_matches(|c: char| c.is_ascii_digit());
+    let mut chars = rest.chars();
+    let series = chars.next()?;
+    let year = chars.next()?;
+    (matches!(series, 'C' | 'G' | 'M') && year == '5').then_some("Alpha 9 AI Gen 8")
+}
+
 fn soc_name(raw: &str) -> Option<String> {
     let key = raw.trim_matches('_').trim().to_uppercase();
     Some(
@@ -450,6 +461,13 @@ pub fn normalize(reply: &Value) -> Result<SystemInfo, String> {
         .find_map(|key| text(&environment[*key]))
         .or_else(|| text(&reply["chip_name"]))
         .and_then(soc_name);
+    let model = clean(&reply["properties"]["modelName"]);
+    // The TV only reports a chip code, so codes we cannot name fall back to the model's year.
+    let soc = match (soc, model.as_deref().and_then(soc_from_model)) {
+        (Some(code), Some(name)) if !code.starts_with("Alpha") => Some(format!("{name} ({code})")),
+        (None, Some(name)) => Some(name.to_owned()),
+        (soc, _) => soc,
+    };
     let loads = core_loads(&reply["pm_status"], &reply["cpu_online"]);
     let storage = storage(&reply["storage"]);
     let total = meminfo(&reply["meminfo"], "MemTotal").filter(|v| *v > 0);
@@ -473,7 +491,7 @@ pub fn normalize(reply: &Value) -> Result<SystemInfo, String> {
         storage_free_kb: storage.map(|s| s.1),
         storage_used_percent: storage.map(|s| s.2),
         emmc_health: emmc_health(&reply["emmc_life_time"]),
-        model: clean(&reply["properties"]["modelName"]),
+        model,
         firmware: clean(&reply["properties"]["firmwareVersion"]),
         webos: webos(reply),
         soc,

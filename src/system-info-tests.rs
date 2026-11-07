@@ -245,3 +245,18 @@ fn cpu_model_names_arm_cores_and_counts_them() {
     );
     assert_eq!(cpu_model(&Value::Null), None);
 }
+
+#[test]
+fn unnamed_chip_codes_fall_back_to_the_models_year() {
+    assert_eq!(soc_from_model("OLED55C54LA"), Some("Alpha 9 AI Gen 8"));
+    assert_eq!(soc_from_model("OLED65G56LS"), Some("Alpha 9 AI Gen 8"));
+    assert_eq!(soc_from_model("OLED55C44LA"), None);
+    assert_eq!(soc_from_model("55UT80006LA"), None);
+    let mut reply = full();
+    reply["environment"] = json!("{\"boardTypeStr\":\"_O25_\"}");
+    reply["properties"] = json!({"modelName": "OLED55C54LA"});
+    assert_eq!(
+        normalize(&reply).unwrap().soc.as_deref(),
+        Some("Alpha 9 AI Gen 8 (O25)")
+    );
+}
