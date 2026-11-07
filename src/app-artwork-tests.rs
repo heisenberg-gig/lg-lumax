@@ -709,3 +709,55 @@ fn reset_discards_prefetch_backlog_and_queued_requests() {
     assert!(service.cache.borrow().entries.contains_key(&current));
     assert!(observed.try_recv().is_err());
 }
+
+#[test]
+fn a_chosen_card_color_replaces_the_installed_icons_own_background() {
+    let assets = crate::view::Assets {
+        root: PathBuf::new(),
+        version: "test".into(),
+        metrics: Default::default(),
+        artwork: Service::with_loader(true, |_| {
+            decode(&encoded(ImageFormat::Png, 32, 32, [24, 40, 56, 255]))
+        }),
+    };
+    let apps =
+        crate::platform::normalize_apps(&json!([{"id":"regional.app", "title":"Regional App"}]))
+            .unwrap();
+    let mut state = crate::state::State::new(Default::default());
+    state.preferences.card_color = crate::model::CardColor::Blue;
+    state.set_inventory(
+        crate::model::Inventory {
+            apps,
+            inputs: vec![],
+        },
+        None,
+    );
+    let scene = || {
+        crate::view::scene_with_pill(
+            &state,
+            &assets,
+            800.,
+            100.,
+            time::OffsetDateTime::UNIX_EPOCH,
+        )
+    };
+    poll_until(&assets.artwork, || {
+        scene()
+            .draw
+            .iter()
+            .any(|draw| matches!(draw, crate::renderer::Draw::AppImage(..)))
+    });
+    let loaded = scene();
+    let icon = loaded
+        .draw
+        .iter()
+        .find_map(|draw| match draw {
+            crate::renderer::Draw::AppImage(_, rect, ..) => Some(*rect),
+            _ => None,
+        })
+        .unwrap();
+    // The chosen color fills a card larger than the inset icon.
+    assert!(loaded.draw.iter().any(|draw| matches!(draw,
+        crate::renderer::Draw::Shape(rect, _, 0., _) if rect.w > icon.w && rect.h > icon.h
+    )));
+}

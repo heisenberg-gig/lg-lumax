@@ -940,7 +940,18 @@ fn app_face(
     let installed = artwork.is_some();
     let surface = out.draw.len();
     if let Some(image) = artwork {
-        out.draw.push(Draw::AppImage(image, rect, radius, [1.; 4]));
+        if let Some(rgb) = look.color {
+            // The app's own art brings its own background, so the chosen color becomes the card
+            // and the icon sits inset on it.
+            out.shape(rect, radius, c(rgb, 1.));
+            let side = rect.h * 0.62;
+            let (cx, cy) = rect.center();
+            let inset = Rect::new(cx - side / 2., cy - side / 2., side, side);
+            out.draw
+                .push(Draw::AppImage(image, inset, side * 0.22, [1.; 4]));
+        } else {
+            out.draw.push(Draw::AppImage(image, rect, radius, [1.; 4]));
+        }
     } else if let Some(rgb) = look.color {
         out.shape(rect, radius, c(rgb, 1.));
     } else {
@@ -2835,15 +2846,15 @@ fn system_settings(out: &mut Scene, state: &State) {
         left_y = reading_card(out, language.t("sysThisTv"), &tv, left, top);
     }
     let mut right_y = top;
-    if !memory.is_empty() {
-        right_y = reading_card(out, language.t("sysMemoryStorage"), &memory, right, top);
+    if !network.is_empty() {
+        right_y = reading_card(out, language.t("netHeading"), &network, right, top);
     }
     let second = left_y.max(right_y);
     if !load.is_empty() {
         reading_card(out, language.t("sysLoad"), &load, left, second);
     }
-    if !network.is_empty() {
-        reading_card(out, language.t("netHeading"), &network, right, second);
+    if !memory.is_empty() {
+        reading_card(out, language.t("sysMemoryStorage"), &memory, right, second);
     }
 }
 
