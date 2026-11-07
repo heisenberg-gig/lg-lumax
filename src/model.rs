@@ -297,6 +297,67 @@ impl CardColor {
     }
 }
 
+/// Whether the Home clock is bare text or sits in a glass pill with a clock icon.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClockStyle {
+    #[default]
+    Text,
+    Pill,
+}
+
+impl ClockStyle {
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Text => "clockStyleText",
+            Self::Pill => "clockStylePill",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Text => Self::Pill,
+            Self::Pill => Self::Text,
+        }
+    }
+}
+
+/// Scale of the Home clock.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClockSize {
+    #[default]
+    Medium,
+    Large,
+    XLarge,
+}
+
+impl ClockSize {
+    pub fn scale(self) -> f32 {
+        match self {
+            Self::Medium => 1.,
+            Self::Large => 1.25,
+            Self::XLarge => 1.5,
+        }
+    }
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Medium => "sizeMedium",
+            Self::Large => "sizeLarge",
+            Self::XLarge => "sizeXLarge",
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Medium => Self::Large,
+            Self::Large => Self::XLarge,
+            Self::XLarge => Self::Medium,
+        }
+    }
+}
+
 /// How app cards are drawn, copied out of the preferences for the renderer.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Look {
@@ -360,6 +421,8 @@ pub struct Preferences {
     pub original_icons: bool,
     /// Erase flat backgrounds from installed app icons so the card color shows around the logo.
     pub remove_icon_background: bool,
+    pub clock_style: ClockStyle,
+    pub clock_size: ClockSize,
 }
 
 impl Preferences {
@@ -407,6 +470,8 @@ impl Default for Preferences {
             card_opacity: 100,
             original_icons: false,
             remove_icon_background: false,
+            clock_style: ClockStyle::default(),
+            clock_size: ClockSize::default(),
         }
     }
 }

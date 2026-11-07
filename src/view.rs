@@ -701,6 +701,51 @@ pub fn scene_with_pill(
     out
 }
 
+/// The time at the left of the header, vertically centred on the navigation bar.
+fn home_clock(out: &mut Scene, state: &State, assets: &Assets, clock: &str) {
+    let scale = state.preferences.clock_size.scale();
+    let style = text(24. * scale, 500, -0.03);
+    let center = 76.8;
+    let line = 28.8 * scale;
+    if state.preferences.clock_style == crate::model::ClockStyle::Text {
+        out.text(
+            clock,
+            Rect::new(84., center - line / 2., 300. * scale, line),
+            style,
+            WHITE,
+            false,
+        );
+        return;
+    }
+    // Digits count as the widest one so the pill keeps its size while the time changes.
+    let widest: String = clock
+        .chars()
+        .map(|c| if c.is_ascii_digit() { '0' } else { c })
+        .collect();
+    let height = 49. * scale;
+    let icon = 24. * scale;
+    let pad = 20. * scale;
+    let gap = 12. * scale;
+    let width = pad * 2. + icon + gap + assets.width(&widest, style);
+    let rect = Rect::new(84., center - height / 2., width, height);
+    out.shadow(rect, height / 2., 18., 4., 0.06);
+    out.shape(rect, height / 2., c(0x171c20, 0.72));
+    out.border(rect, height / 2., 1., c(0xffffff, 0.07));
+    out.icon(
+        assets,
+        "clock",
+        Rect::new(rect.x + pad, center - icon / 2., icon, icon),
+        c(0xeeeeee, 0.73),
+    );
+    out.text(
+        clock,
+        Rect::new(rect.x + pad + icon + gap, center - line / 2., width, line),
+        style,
+        WHITE,
+        false,
+    );
+}
+
 fn header(
     out: &mut Scene,
     state: &State,
@@ -715,13 +760,7 @@ fn header(
         state.preferences.hour_24,
         state.preferences.show_seconds,
     );
-    out.text(
-        clock,
-        Rect::new(84., 62.4, 300., 28.8),
-        text(24., 500, -0.03),
-        WHITE,
-        false,
-    );
+    home_clock(out, state, assets, &clock);
     let layout = navigation(assets, language);
     let nav = layout.surface;
     out.shadow(nav, 48., 18., 4., 0.06);
@@ -3912,6 +3951,16 @@ fn custom_settings(out: &mut Scene, state: &State, assets: &Assets) {
                     "stateOff"
                 })
                 .to_owned(),
+        ),
+        (
+            "clockStyle",
+            "clock",
+            language.t(prefs.clock_style.key()).to_owned(),
+        ),
+        (
+            "clockSize",
+            "clock",
+            language.t(prefs.clock_size.key()).to_owned(),
         ),
     ];
     for (index, (key, icon, value)) in rows.into_iter().enumerate() {

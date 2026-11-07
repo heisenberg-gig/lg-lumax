@@ -1181,3 +1181,7 @@ colour (`remove_background` in `app_artwork.rs`), a cut-out with that colour flo
 from the edges and a softened rim. Icons with gradient or photographic edges, or where removal
 would erase almost everything, get no cut-out and are drawn unchanged. A chosen card color is
 passed as the icon's backdrop override in `Draw::AppImage`.
+
+The Home clock (`home_clock` in `view.rs`) is bare text or a glass pill with the clock icon, scaled
+by `clock_size` (1.0, 1.25, 1.5) and centred on the navigation bar. The pill sizes itself from the
+widest digits so it does not resize every second.
