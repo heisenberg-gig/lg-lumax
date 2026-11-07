@@ -1,5 +1,27 @@
 # lg-luma
 
+## 2.17.0
+
+### Minor Changes
+
+- e414516: Add European Portuguese (Português (Portugal)) as a separate language beside Portuguese (Brazil).
+- 1934329: Add a read-only **Picture** section to Settings showing picture mode, OLED light, brightness, contrast, colour, sharpness, black level, colour temperature, gamma, dynamic contrast, energy saving, HDR format, game mode and FreeSync.
+- 612f2db: Add a "None" card color to Customize that removes the card entirely and leaves only the logo or icon (installed icons lose their flat background too). The Inputs cards on Home now use the same glass surface as the navigation bar and Settings rows.
+- 0da3388: Add Home clock options to Customize: show the clock as plain text or in a glass pill with a clock icon, and choose its size (medium, large, extra large).
+- 2cd24e5: Add a read-only OLED Care section to Settings: panel hours, time to the next maintenance and Pixel Refresher, completed cycles and failures, and the state of screen shift, logo dimming, ASBL, GSR (with its stress events) and scheduled pixel refresh. The Settings menu is now ordered General, Background, Picture, OLED Care, Widgets, System.
+- 19e0909: Add a Customize section after Background with icon shape, card color, card opacity and an option to use each app's original icon, plus a live sample card. In Settings → System, show the processor model, reorder the cards (TV and CPU on the left, Memory and storage and Network on the right) and drop the network signal, interface and traffic lines.
+- 2e63dd1: Settings → Picture follows the TV's own menu: OLED pixel brightness, contrast, black level (the 0–100 slider), dynamic contrast, peak brightness, gamma (2.2 or BT.1886), sharpness, super resolution and noise reduction, with Off/Low/Medium/High translated. The Signal card shows the video format and the audio format with its Dolby Atmos layer. Also fixes the session timer and remote battery readings.
+- a616758: Redesign Recent apps as a horizontal carousel: the focused card is largest, each card has its app icon and name above it, a hint explains how to close an app, and a chip at the top shows the TV's RAM use (read while Recent apps is open).
+- e68bf45: Remove the "Favorites" heading from Home and add a "Close all" button to Recent apps, which removes every listed app one by one with the same request used for a single app.
+- 6070de4: Add "Remove icon background" to Customize: installed app icons with a flat background have it erased so the chosen card color shows around the logo. A chosen card color now also fills the whole card behind installed icons. Icons with gradient or photographic backgrounds are left as they are.
+- 7a43692: Move **Text rendering**, **Refresh apps & inputs** and **Quit app** to Settings → General, remove the in-app update card and its startup check, and turn **System** into a read-only metrics page: processor temperature, CPU load and clocks, memory, swap, app storage, eMMC health, model, firmware, webOS, SoC, RAM, panel refresh and Wi-Fi.
+- 09a46b5: Add a **Network** card (connection, internet, network name, IP, mask, gateway, DNS, signal, interface, traffic) and the remote's battery level to Settings → System, show eMMC health, and remove the non-working refresh row from the System and Picture pages.
+- c511342: Polish Settings → System: the Load card is now CPU and gains a session timer (time since the TV last powered on), This TV is renamed TV, TV and Network sit in the left column and CPU and Memory and storage in the right, and the remote battery falls back to the level native-tv saved when the remote is asleep.
+
+### Patch Changes
+
+- 2378cff: A chosen card color now also replaces the background of apps that use their own installed icon (the icon sits inset on the colored card). In Settings → System, Network moves above Memory and storage, and 2025 OLED C/G/M models whose chip code is unknown are named Alpha 9 AI Gen 8.
+
 ## 2.16.2
 
 ### Patch Changes
