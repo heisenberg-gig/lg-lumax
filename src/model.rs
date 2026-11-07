@@ -257,22 +257,25 @@ pub enum CardColor {
     Purple,
     Green,
     Red,
+    /// No card at all: only the logo or icon is drawn.
+    Clear,
 }
 
 impl CardColor {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Auto,
         Self::Graphite,
         Self::Blue,
         Self::Purple,
         Self::Green,
         Self::Red,
+        Self::Clear,
     ];
 
     /// RGB of the replacement surface; `None` keeps each app's own.
     pub fn rgb(self) -> Option<u32> {
         match self {
-            Self::Auto => None,
+            Self::Auto | Self::Clear => None,
             Self::Graphite => Some(0x2a2d31),
             Self::Blue => Some(0x1f3f7a),
             Self::Purple => Some(0x4a2a7a),
@@ -289,6 +292,7 @@ impl CardColor {
             Self::Purple => "colorPurple",
             Self::Green => "colorGreen",
             Self::Red => "colorRed",
+            Self::Clear => "colorNone",
         }
     }
 
@@ -363,6 +367,8 @@ impl ClockSize {
 pub struct Look {
     pub radius: f32,
     pub color: Option<u32>,
+    /// Draw no card, only the logo or icon.
+    pub clear: bool,
     pub opacity: f32,
     pub original_icons: bool,
     pub remove_background: bool,
@@ -430,6 +436,7 @@ impl Preferences {
         Look {
             radius: self.icon_shape.radius(),
             color: self.card_color.rgb(),
+            clear: self.card_color == CardColor::Clear,
             opacity: f32::from(self.card_opacity.clamp(40, 100)) / 100.,
             original_icons: self.original_icons,
             remove_background: self.remove_icon_background,

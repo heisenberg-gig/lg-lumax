@@ -1185,3 +1185,7 @@ passed as the icon's backdrop override in `Draw::AppImage`.
 The Home clock (`home_clock` in `view.rs`) is bare text or a glass pill with the clock icon, scaled
 by `clock_size` (1.0, 1.25, 1.5) and centred on the navigation bar. The pill sizes itself from the
 widest digits so it does not resize every second.
+
+"None" as card color (`Look::clear`) draws no surface, border or shadow. Installed icons use their
+cut-out when one exists and are drawn with `Backdrop::Clear`, which the paint shader renders with
+the icon's own alpha instead of compositing it onto a backdrop colour.

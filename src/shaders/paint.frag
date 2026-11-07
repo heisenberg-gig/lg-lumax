@@ -5,6 +5,7 @@ uniform vec4 u_edge_fade_x;
 uniform vec3 u_app_top;
 uniform vec3 u_app_bottom;
 uniform bool u_app;
+uniform bool u_app_clear;
 varying PAINT_PRECISION vec2 v_uv;
 varying PAINT_PRECISION vec4 v_color;
 varying PAINT_PRECISION vec4 v_shape;
@@ -51,7 +52,11 @@ void main() {
         vec3 background = mix(u_app_top, u_app_bottom, y);
         float inside = step(0.0, v_uv.x) * step(v_uv.x, 1.0) *
             step(0.0, v_uv.y) * step(v_uv.y, 1.0);
-        color = vec4(mix(background, color.rgb, color.a * inside), 1.0);
+        if (u_app_clear) {
+            color = vec4(color.rgb, color.a * inside);
+        } else {
+            color = vec4(mix(background, color.rgb, color.a * inside), 1.0);
+        }
     }
     gl_FragColor = color * v_color * vec4(1.0, 1.0, 1.0, alpha * edge_coverage());
 }

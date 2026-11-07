@@ -1,5 +1,6 @@
 //! Screen geometry and styling mirror the web UI's 1920×1080 / 16px-rem layout.
 use crate::{
+    app_artwork::Backdrop,
     i18n::Language,
     model::{App, BACKGROUNDS, CATEGORIES, Input, InputMode, Look},
     renderer::{Color, Draw, TextStyle, WHITE},
@@ -864,7 +865,13 @@ fn tile(
         19.2,
         if focused { 34. } else { 22. },
         if focused { 14. } else { 9. },
-        (if focused { 0.4 } else { 0.165 }) * state.preferences.look().opacity,
+        (if focused { 0.4 } else { 0.165 })
+            * state.preferences.look().opacity
+            * if state.preferences.look().clear {
+                0.
+            } else {
+                1.
+            },
     );
     let look = state.preferences.look();
     let favorite_color = app_face(
@@ -979,18 +986,24 @@ fn app_face(
     let installed = artwork.is_some();
     let surface = out.draw.len();
     if let Some(image) = artwork {
-        let image = if look.remove_background {
+        let image = if look.remove_background || look.clear {
             image.cutout.clone().unwrap_or(image)
         } else {
             image
         };
         // A chosen color replaces the icon's own backdrop; the icon stays inset on it.
-        let backdrop = look.color.map(|rgb| {
+        let backdrop = if look.clear {
+            Backdrop::Clear
+        } else if let Some(rgb) = look.color {
             let rgb = [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8];
-            [rgb; 2]
-        });
+            Backdrop::Color([rgb; 2])
+        } else {
+            Backdrop::Own
+        };
         out.draw
             .push(Draw::AppImage(image, rect, radius, [1.; 4], backdrop));
+    } else if look.clear {
+        // No card: the logo below is all that is drawn.
     } else if let Some(rgb) = look.color {
         out.shape(rect, radius, c(rgb, 1.));
     } else {
@@ -1004,7 +1017,9 @@ fn app_face(
     if look.opacity < 1. {
         out.fade(surface, look.opacity, 1.);
     }
-    out.border(rect, radius, 1., c(0xffffff, 0.063));
+    if !look.clear {
+        out.border(rect, radius, 1., c(0xffffff, 0.063));
+    }
     if let Some(brand) = logo {
         let (ratio, height) = brand.artwork_size();
         let height = height * rect.h / FACE_HEIGHT;
@@ -1337,26 +1352,13 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
             if focused { 14. } else { 1. },
             if focused { 0.4 } else { 0.01 },
         );
-        out.draw.push(Draw::RoundedGradient(
-            rect,
-            18.4,
-            if focused {
-                c(0x30363c, 0.70)
-            } else {
-                c(0x20252b, 0.60)
-            },
-            if focused {
-                c(0x242a30, 0.65)
-            } else {
-                c(0x171c22, 0.55)
-            },
-        ));
-        out.border(
-            rect,
-            18.4,
-            1.,
-            c(0xffffff, if focused { 0.24 } else { 0.063 }),
-        );
+        // The same glass as the navigation bar and the Settings rows.
+        if focused {
+            out.shape(rect, 18.4, c(0x2b3238, 0.82));
+            out.border(rect, 18.4, 1., c(0xffffff, 0.24));
+        } else {
+            settings_surface(out, rect, 18.4);
+        }
         let art = Rect::new(rect.x + 21., rect.y + 24., 56., 56.);
         out.draw.push(Draw::RoundedGradient(
             art,
@@ -3983,7 +3985,13 @@ fn custom_settings(out: &mut Scene, state: &State, assets: &Assets) {
     if let Some(app) = state.apps().first() {
         let rect = Rect::new(1480., 164.8 - s, 270., FACE_HEIGHT);
         let look = prefs.look();
-        out.shadow(rect, look.radius, 22., 9., 0.165 * look.opacity);
+        out.shadow(
+            rect,
+            look.radius,
+            22.,
+            9.,
+            if look.clear { 0. } else { 0.165 * look.opacity },
+        );
         app_face(out, assets, app, rect, language, look.radius, look);
     }
 }
