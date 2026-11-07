@@ -1167,3 +1167,11 @@ synchronization, copied recovery files, protected uninstall rejection, and compl
 new disposable test app through status 31. The previous build, preferences and integration policy
 were restored after testing. Manifest takeover on webOS 10/11 is covered by fixtures, but was not
 tested on hardware in this run; standby and cold boot were not tested.
+
+## Customize
+
+Settings → Customize (after Background) holds the card look: `icon_shape`, `card_color`,
+`card_opacity` (40–100) and `original_icons`. OK or Right cycles a row. `Preferences::look()`
+turns them into a `Look` that `app_face` applies: a chosen color replaces the app's drawn
+surface, opacity fades only the surface (never the logo or border), and original icons prefer the
+installed app's own artwork over Luma's curated logo.

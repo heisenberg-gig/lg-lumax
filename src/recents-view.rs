@@ -26,6 +26,11 @@ fn ram_label(state: &State) -> Option<String> {
 
 pub fn render(out: &mut Scene, state: &State, assets: &Assets) {
     let language = state.preferences.language;
+    let look = Look {
+        color: None,
+        opacity: 1.,
+        ..state.preferences.look()
+    };
     let recent = &state.recents;
     let focus = recent_focus(state);
     out.modal = Some(Rect::new(0., 0., 1920., 1080.));
@@ -136,8 +141,8 @@ pub fn render(out: &mut Scene, state: &State, assets: &Assets) {
                 .iter()
                 .find(|app| app.id == entry.app.id)
                 .unwrap_or(&entry.app);
-            app_face(out, assets, app, rect, language, radius);
-            app_face(out, assets, app, icon_rect, language, 9.);
+            app_face(out, assets, app, rect, language, radius, look);
+            app_face(out, assets, app, icon_rect, language, 9., look);
             out.text(
                 &app.title,
                 Rect::new(rect.x + 96., rect.y - 58., (rect.w - 96.).max(0.), 38.),

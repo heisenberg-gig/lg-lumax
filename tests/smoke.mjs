@@ -219,7 +219,7 @@ try {
   assert.equal(clock.focus, 'ClockFormat');
   assert.ok(clock.ui_text.includes('Clock format'));
   assert.ok(clock.ui_text.includes('Time format'));
-  const inputsPage = 'settings,down,down,down,down,down,enter,down,down,down,down,enter';
+  const inputsPage = 'settings,down,down,down,down,down,down,enter,down,down,down,down,enter';
   const inputs = await scenario('inputs-page', inputsPage);
   assert.equal(inputs.subpage, 'Inputs');
   assert.deepEqual(inputs.focus, { InputMode: 'com.webos.app.hdmi1' });
@@ -279,7 +279,7 @@ try {
   assert.equal(profiled.render.profile.presented, 24);
   assert.ok(profiled.render.profile.pacing.samples > 0);
   assert.ok(profiled.render.profile.cpu_submission.mean_ms >= 0);
-  const widgetsPage = 'settings,down,down,down,down,down,enter';
+  const widgetsPage = 'settings,down,down,down,down,down,down,enter';
   const widgets = await scenario('widgets-settings', widgetsPage);
   assert.deepEqual(widgets.focus, { Widget: 4 });
   assert.ok(widgets.ui_text.includes('Widgets'));
@@ -368,12 +368,18 @@ try {
   assert.ok(general.ui_text.includes('Refresh apps & inputs'));
   assert.ok(general.ui_text.includes('Quit app'));
   assert.ok(general.ui_text.includes('Text rendering'));
-  const oled = await scenario('oled-care-settings', 'settings,down,down,down,down,right');
-  assert.deepEqual(oled.focus, { Sidebar: 3 });
+  const customize = await scenario('customize-settings', 'settings,down,down,down,right,enter');
+  assert.deepEqual(customize.focus, { Custom: 0 });
+
+  const oled = await scenario('oled-care-settings', 'settings,down,down,down,down,down,right');
+  assert.deepEqual(oled.focus, { Sidebar: 4 });
   for (const label of ['Panel hours', 'Maintenance in', 'Screen shift', 'ASBL', 'GSR events'])
     assert.ok(oled.ui_text.includes(label), `OLED Care section shows ${label}`);
-  const system = await scenario('system-settings', 'settings,down,down,down,down,down,down,right');
-  assert.deepEqual(system.focus, { Sidebar: 5 });
+  const system = await scenario(
+    'system-settings',
+    'settings,down,down,down,down,down,down,down,right',
+  );
+  assert.deepEqual(system.focus, { Sidebar: 6 });
   assert.ok(!system.ui_text.includes('Luma update'));
   assert.ok(!system.ui_text.includes('Quit app'));
   assert.ok(!system.ui_text.includes('Refresh status'));

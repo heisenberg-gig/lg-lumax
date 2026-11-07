@@ -228,3 +228,20 @@ fn storage_and_memory_are_validated() {
     assert_eq!(size(512), "1 MB");
     assert_eq!(size(2_516_582), "2.4 GB");
 }
+
+#[test]
+fn cpu_model_names_arm_cores_and_counts_them() {
+    let arm = json!(
+        "processor\t: 0\nCPU implementer\t: 0x41\nCPU part\t: 0xd09\nprocessor\t: 1\nCPU implementer\t: 0x41\nCPU part\t: 0xd09\n"
+    );
+    assert_eq!(cpu_model(&arm).as_deref(), Some("Cortex-A73 × 2"));
+    let named = json!("processor : 0\nmodel name : Some CPU @ 2GHz\n");
+    assert_eq!(cpu_model(&named).as_deref(), Some("Some CPU @ 2GHz × 1"));
+    assert_eq!(
+        cpu_model(&json!(
+            "processor : 0\nCPU implementer : 0x99\nCPU part : 0x1\n"
+        )),
+        None
+    );
+    assert_eq!(cpu_model(&Value::Null), None);
+}
